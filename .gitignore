@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+
+# Secrets / credentials — never commit
+credentials.json
+token.json
+.streamlit/secrets.toml
+.env
+.env.*
+
+# Local state
+*.db
+*.sqlite
+*.sqlite3
+data/
+eval/cache/
+eval/reports/*.png
+eval/reports/*.csv
+!eval/reports/.gitkeep
+
+# IDE
+.idea/
+.vscode/
