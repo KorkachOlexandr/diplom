@@ -1,0 +1,10 @@
+{
+  "n_examples": 100,
+  "n_exact_copy": 20,
+  "n_paraphrase": 20,
+  "n_unrelated": 60,
+  "exact_copy_detected_at_0.5": 20,
+  "paraphrase_detected_at_0.5": 19,
+  "auc": 1.0,
+  "note": "AUC reflects MinHash channel only. Embedding channel (Phase 2) would dominate the paraphrase column; left to a future run with sentence-transformers installed."
+}

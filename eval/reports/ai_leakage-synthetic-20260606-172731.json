@@ -1,0 +1,181 @@
+{
+  "n_examples": 125,
+  "n_positive": 85,
+  "overall": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "per_rule": {
+    "markdown.bold_in_prose": {
+      "name": "Markdown bold in plain prose (3+ occurrences)",
+      "family": "markdown_leak",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "markdown.headings_in_prose": {
+      "name": "Markdown headings in plain prose (2+ occurrences)",
+      "family": "markdown_leak",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "markdown.code_fences_in_prose": {
+      "name": "Triple-backtick fences in a non-code submission",
+      "family": "markdown_leak",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "self_id.named_model": {
+      "name": "Self-identification: 'I am [ChatGPT|Claude|Gemini|...]'",
+      "family": "self_id",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "self_id.trained_by": {
+      "name": "Self-identification: 'trained by [OpenAI|Anthropic|...]'",
+      "family": "self_id",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "self_id.developed_by": {
+      "name": "Self-identification: 'developed/created by [vendor]'",
+      "family": "self_id",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "policy.im_sorry_but": {
+      "name": "Refusal opener: 'I'm sorry, but I cannot/can't...'",
+      "family": "policy",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "policy.no_realtime": {
+      "name": "Capability disclosure: 'no access to real-time information'",
+      "family": "policy",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "policy.cannot_browse": {
+      "name": "Capability disclosure: 'I can't browse the internet'",
+      "family": "policy",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "preamble.certainly_heres": {
+      "name": "Assistant preamble: 'Certainly! Here is/are...'",
+      "family": "preamble",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "preamble.happy_to_help": {
+      "name": "Assistant preamble: 'I'd be happy to...'",
+      "family": "preamble",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "preamble.heres_a": {
+      "name": "Assistant preamble: 'Here's a/an ...essay/summary/...'",
+      "family": "preamble",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "refusal.as_an_ai": {
+      "name": "Self-identification: 'As an AI language model...'",
+      "family": "refusal",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "refusal.i_cannot": {
+      "name": "Refusal artifact: 'I cannot/can't [provide|generate]...'",
+      "family": "refusal",
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "tp": 5,
+      "fp": 5,
+      "fn": 0
+    },
+    "refusal.knowledge_cutoff": {
+      "name": "Knowledge-cutoff disclosure",
+      "family": "refusal",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "template.bracket_placeholder": {
+      "name": "Unfilled bracket placeholder: '[Your Name]', '[Insert Date]', ...",
+      "family": "template",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    },
+    "template.instruction_echo": {
+      "name": "Instruction echo: prompt-like phrasing left in the submission",
+      "family": "template",
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 5,
+      "fp": 0,
+      "fn": 0
+    }
+  }
+}

@@ -17,6 +17,7 @@ class Settings(BaseModel):
 
     copyleaks_email: str | None = None
     copyleaks_api_key: str | None = None
+    copyleaks_webhook_url: str | None = None  # public base URL for CopyLeaks callbacks
 
     @property
     def has_google_credentials(self) -> bool:

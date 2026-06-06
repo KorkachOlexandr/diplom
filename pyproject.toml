@@ -12,17 +12,22 @@ dependencies = [
     "python-docx>=1.1",
     "pydantic>=2.6",
     "requests>=2.31",
+    "datasketch>=1.6",
+    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
-# Phase 2 (cohort similarity)
-cohort = [
-    "datasketch>=1.6",
+# Sentence-embedding paraphrase channel (Phase 2). Heavy: ~1.5GB with torch
+# and a one-time model download. MinHash channel works without this.
+embeddings = [
     "sentence-transformers>=2.5",
-    "faiss-cpu>=1.7",
-    "numpy>=1.26",
 ]
-# Phase 5 (evaluation)
+# CopyLeaks webhook receiver (Phase 4).
+webhook = [
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+]
+# Evaluation chapter.
 eval = [
     "scikit-learn>=1.4",
     "pandas>=2.2",
