@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
+
+# Google's consent screen sometimes substitutes equivalent scopes (e.g.
+# classroom.coursework.students.readonly -> classroom.student-submissions.students.readonly).
+# Without this, oauthlib raises Warning on any granted-vs-requested scope mismatch.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
