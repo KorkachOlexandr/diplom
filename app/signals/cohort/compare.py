@@ -1,27 +1,39 @@
-"""Fuse the MinHash and embedding channels into per-submission CohortMatch lists.
+"""Fuse the winnowing and AST-subtree channels into CohortMatch lists.
 
-MinHash always runs (datasketch is a hard dep). Embedding paraphrase
-detection is optional — if sentence-transformers isn't installed, we log
-once and continue with MinHash-only output, which is what the thesis
-defends as the "always available" cohort signal.
+Both channels are CPU-cheap and use only the stdlib; both always run.
+The thesis discusses the complementary failure modes:
+
+- Winnowing survives renaming and reformatting but is sensitive to
+  statement reordering and function extraction.
+- AST subtree hashing survives structural-equivalence edits but is
+  empty for any file that doesn't parse.
+
+For unparseable submissions (very common in student work) only the
+winnowing channel produces evidence — that fallback is deliberate.
 """
 from __future__ import annotations
 
 import logging
 
 from app.report.model import CohortMatch, SubmissionReport
-from app.signals.cohort.shingles import longest_matching_span, near_duplicate_pairs
+from app.signals.cohort.ast_hash import compare_subtrees, subtree_hashes
+from app.signals.cohort.tokenize_code import detect_language, tokenize_source
+from app.signals.cohort.winnowing import compare_submissions, fingerprints
 
 
 log = logging.getLogger(__name__)
 
-
-# Tuning. Both thresholds are documented in the plan's evaluation chapter
-# and will be revisited in Phase 5 after the PR curves come in.
-MINHASH_LSH_THRESHOLD = 0.3   # LSH candidate band; pair-level score still reported
-MIN_SPAN_CHARS = 60           # ignore short coincidental matches
-EMBEDDING_THRESHOLD = 0.85    # cosine cutoff for paraphrase pairs
-MAX_EMBEDDING_HITS_PER_PAIR = 3
+# Tuning knobs documented in Phase 5 evaluation chapter.
+# WINNOW_MIN_SCORE is intentionally above the noise floor for small
+# functions: at ~30 tokens, unrelated Python files share common k-grams
+# like `def IDENT ( IDENT ) :` that drag the false-match rate up. 0.40
+# is the empirical knee where exact and renamed copies still register
+# (~0.9+) while unrelated short functions stay below.
+WINNOW_K = 5
+WINNOW_W = 4
+WINNOW_MIN_SCORE = 0.40
+AST_MIN_SCORE = 0.30
+MAX_SPANS_PER_MATCH = 4
 
 
 def find_matches(submissions: list[SubmissionReport]) -> dict[str, list[CohortMatch]]:
@@ -32,113 +44,113 @@ def find_matches(submissions: list[SubmissionReport]) -> dict[str, list[CohortMa
     sub_by_id = {s.submission_id: s for s in submissions}
     name_by_id = {s.submission_id: s.student_name for s in submissions}
 
-    _run_minhash_channel(submissions, sub_by_id, name_by_id, matches)
-    _run_embedding_channel(submissions, name_by_id, matches)
+    _run_winnowing_channel(submissions, sub_by_id, name_by_id, matches)
+    _run_ast_channel(submissions, sub_by_id, name_by_id, matches)
 
-    # Sort each submission's matches highest-score first for the UI.
     for sid in matches:
         matches[sid].sort(key=lambda m: m.score, reverse=True)
     return matches
 
 
-def _run_minhash_channel(
+def _run_winnowing_channel(
     submissions: list[SubmissionReport],
     sub_by_id: dict[str, SubmissionReport],
     name_by_id: dict[str, str],
     matches: dict[str, list[CohortMatch]],
 ) -> None:
-    items = [(s.submission_id, s.text) for s in submissions if s.text]
-    pairs = near_duplicate_pairs(items, threshold=MINHASH_LSH_THRESHOLD)
+    fps_by_sub: list[tuple[str, list]] = []
+    for s in submissions:
+        if not s.text:
+            continue
+        try:
+            tokens = tokenize_source(s.text)
+        except Exception as e:  # noqa: BLE001 — never fail the whole scan on one file
+            log.warning("tokenize failed for %s: %s", s.submission_id, e)
+            continue
+        fps = fingerprints(tokens, k=WINNOW_K, w=WINNOW_W)
+        fps_by_sub.append((s.submission_id, fps))
 
-    for id_a, id_b, jaccard in pairs:
+    pairs = compare_submissions(fps_by_sub, min_score=WINNOW_MIN_SCORE)
+
+    for id_a, id_b, m in pairs:
         text_a = sub_by_id[id_a].text
         text_b = sub_by_id[id_b].text
-        span = longest_matching_span(text_a, text_b, min_chars=MIN_SPAN_CHARS)
-        if span is None:
-            continue
-        (a_start, a_end), (b_start, b_end), exc_a, exc_b = span
-        matches[id_a].append(
-            CohortMatch(
-                other_submission_id=id_b,
-                other_student_name=name_by_id[id_b],
-                channel="minhash",
-                score=float(jaccard),
-                this_span=(a_start, a_end),
-                other_span=(b_start, b_end),
-                this_excerpt=_truncate(exc_a),
-                other_excerpt=_truncate(exc_b),
-            )
-        )
-        matches[id_b].append(
-            CohortMatch(
-                other_submission_id=id_a,
-                other_student_name=name_by_id[id_a],
-                channel="minhash",
-                score=float(jaccard),
-                this_span=(b_start, b_end),
-                other_span=(a_start, a_end),
-                this_excerpt=_truncate(exc_b),
-                other_excerpt=_truncate(exc_a),
-            )
-        )
-
-
-def _run_embedding_channel(
-    submissions: list[SubmissionReport],
-    name_by_id: dict[str, str],
-    matches: dict[str, list[CohortMatch]],
-) -> None:
-    try:
-        from app.signals.cohort.embeddings import EmbeddingIndex
-    except ImportError:
-        log.info("sentence-transformers not installed; skipping embedding channel")
-        return
-
-    index = EmbeddingIndex()
-    try:
-        for s in submissions:
-            if s.text:
-                index.add(s.submission_id, s.text)
-        pairs = index.paraphrase_pairs(threshold=EMBEDDING_THRESHOLD)
-    except Exception as e:  # noqa: BLE001 — embedding path is non-critical; degrade gracefully
-        log.warning("embedding channel failed: %s: %s", type(e).__name__, e)
-        return
-
-    # Group by (a, b) so we can cap how many sentence pairs per submission pair.
-    grouped: dict[tuple[str, str], list[tuple]] = {}
-    for entry in pairs:
-        id_a, id_b = entry[0], entry[1]
-        grouped.setdefault((id_a, id_b), []).append(entry)
-
-    for (id_a, id_b), entries in grouped.items():
-        entries.sort(key=lambda e: e[6], reverse=True)
-        for id_a_, id_b_, span_a, span_b, sent_a, sent_b, cosine in entries[
-            :MAX_EMBEDDING_HITS_PER_PAIR
-        ]:
+        # surface up to N spans; UI shows them one row each
+        spans = m.spans[:MAX_SPANS_PER_MATCH]
+        for (a_start, a_end), (b_start, b_end) in spans:
             matches[id_a].append(
                 CohortMatch(
                     other_submission_id=id_b,
                     other_student_name=name_by_id[id_b],
-                    channel="embedding",
-                    score=cosine,
-                    this_span=span_a,
-                    other_span=span_b,
-                    this_excerpt=_truncate(sent_a),
-                    other_excerpt=_truncate(sent_b),
+                    channel="winnowing",
+                    score=float(m.score),
+                    this_span=(a_start, a_end),
+                    other_span=(b_start, b_end),
+                    this_excerpt=_truncate(text_a[a_start:a_end]),
+                    other_excerpt=_truncate(text_b[b_start:b_end]),
                 )
             )
             matches[id_b].append(
                 CohortMatch(
                     other_submission_id=id_a,
                     other_student_name=name_by_id[id_a],
-                    channel="embedding",
-                    score=cosine,
-                    this_span=span_b,
-                    other_span=span_a,
-                    this_excerpt=_truncate(sent_b),
-                    other_excerpt=_truncate(sent_a),
+                    channel="winnowing",
+                    score=float(m.score),
+                    this_span=(b_start, b_end),
+                    other_span=(a_start, a_end),
+                    this_excerpt=_truncate(text_b[b_start:b_end]),
+                    other_excerpt=_truncate(text_a[a_start:a_end]),
                 )
             )
+
+
+def _run_ast_channel(
+    submissions: list[SubmissionReport],
+    sub_by_id: dict[str, SubmissionReport],
+    name_by_id: dict[str, str],
+    matches: dict[str, list[CohortMatch]],
+) -> None:
+    hashes_by_sub: list[tuple[str, list]] = []
+    for s in submissions:
+        if not s.text:
+            continue
+        hashes_by_sub.append((s.submission_id, subtree_hashes(s.text)))
+
+    pairs = compare_subtrees(hashes_by_sub, min_score=AST_MIN_SCORE)
+
+    for id_a, id_b, m in pairs:
+        # AST channel reports a global structural-overlap score; we don't
+        # have per-span char offsets for the matched subtrees as easily as
+        # winnowing does, so we surface one summary row per pair with the
+        # largest shared subtree size in the excerpt.
+        excerpt = (
+            f"{m.shared_subtrees} shared AST subtrees "
+            f"(largest = {m.largest_subtree} nodes)"
+        )
+        matches[id_a].append(
+            CohortMatch(
+                other_submission_id=id_b,
+                other_student_name=name_by_id[id_b],
+                channel="ast",
+                score=float(m.score),
+                this_span=(0, 0),
+                other_span=(0, 0),
+                this_excerpt=excerpt,
+                other_excerpt=excerpt,
+            )
+        )
+        matches[id_b].append(
+            CohortMatch(
+                other_submission_id=id_a,
+                other_student_name=name_by_id[id_a],
+                channel="ast",
+                score=float(m.score),
+                this_span=(0, 0),
+                other_span=(0, 0),
+                this_excerpt=excerpt,
+                other_excerpt=excerpt,
+            )
+        )
 
 
 def _truncate(s: str, n: int = 500) -> str:

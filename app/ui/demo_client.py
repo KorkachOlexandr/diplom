@@ -5,37 +5,31 @@ from dataclasses import dataclass
 from app.classroom.client import Assignment, Course, DriveAttachment, Submission
 
 
-# Demo mode mirrors the live test bed the thesis demos against:
-# - Assignment A "Originals & Copies": one true AI-leakage positive (Cyril),
-#   plus an acc1==acc4 cohort match and an acc2 web-plagiarism target that
-#   are placeholders for Phase 2 / Phase 4 signals respectively.
-# - Assignment B "Known limitations": each submission trips a different
-#   rule on legitimate text — this is the false-positive showcase that
-#   feeds the limitations chapter.
-# - Assignment C "All clean": four distinct honest essays. Nothing should
-#   fire. Includes one empty submission to exercise the no-attachment path.
+# Demo mode mirrors the live test bed the thesis demos against. All samples
+# are short Python solutions to introductory CS problems — chosen so the
+# winnowing and AST channels actually have signal to fire on.
 
 
-_COURSE = Course(id="demo-course", name="Diplom Demo Course", section="Section A")
+_COURSE = Course(id="demo-course", name="CS101: Programming Fundamentals", section="Section A")
 
 _ASSIGNMENTS: list[Assignment] = [
     Assignment(
         id="assignment-a",
         course_id="demo-course",
-        title="A. Originals & Copies",
-        description="Mix of original, copied, and AI-pasted submissions.",
+        title="A. Originals & Copies — implement bubble_sort",
+        description="Implement bubble_sort(lst) in Python.",
     ),
     Assignment(
         id="assignment-b",
         course_id="demo-course",
         title="B. Known limitations (false positives)",
-        description="Each submission trips a leakage rule on legitimate text.",
+        description="Submissions that legitimately trip leakage rules.",
     ),
     Assignment(
         id="assignment-c",
         course_id="demo-course",
-        title="C. All clean",
-        description="Four honest, distinct essays. Nothing should fire.",
+        title="C. All clean — implement fibonacci",
+        description="Four distinct honest implementations of fib(n).",
     ),
 ]
 
@@ -45,119 +39,184 @@ class _DemoSub:
     sid: str
     student_name: str
     text: str
-    mime_type: str = "text/plain"
+    mime_type: str = "text/x-python"
 
 
-# Four students enrolled across the course (mirrors the live setup with 4 accs).
 _STUDENTS = ["Anna Aiken", "Boris Borrowed", "Cyril Chatgpt", "Daria Duplicate"]
 
 
-_ORIGINAL_TEXT = (
-    "Climate change refers to long-term shifts in temperatures and weather "
-    "patterns. While some of these shifts are natural, human activities — "
-    "particularly the burning of fossil fuels — have been the dominant driver "
-    "since the industrial revolution."
-)
+# Assignment A: bubble_sort, same problem statement.
+_BUBBLE_ORIGINAL = '''\
+def bubble_sort(lst):
+    n = len(lst)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if lst[j] > lst[j + 1]:
+                lst[j], lst[j + 1] = lst[j + 1], lst[j]
+    return lst
+'''
+
+
+# acc4: same control flow as acc1 but renamed variables — tests the cohort
+# signal's resistance to lexical renaming.
+_BUBBLE_RENAMED = '''\
+def bubble_sort(arr):
+    length = len(arr)
+    for outer in range(length):
+        for inner in range(0, length - outer - 1):
+            if arr[inner] > arr[inner + 1]:
+                arr[inner], arr[inner + 1] = arr[inner + 1], arr[inner]
+    return arr
+'''
+
+
+# acc2: lifted from a well-known stackoverflow-style snippet — placeholder
+# for the external web plagiarism signal that lives in Phase 4 / Moss-equivalent.
+_BUBBLE_WEB_COPY = '''\
+def bubble_sort(nums):
+    # See https://realpython.com/sorting-algorithms-python/#the-bubble-sort-algorithm-in-python
+    for i in range(len(nums) - 1, 0, -1):
+        for j in range(i):
+            if nums[j] > nums[j + 1]:
+                nums[j], nums[j + 1] = nums[j + 1], nums[j]
+    return nums
+'''
+
+
+# acc3: AI-pasted with multiple leakage signals, Phase 3 true positive.
+_BUBBLE_AI_PASTED = '''\
+# Certainly! Here's the bubble_sort function you requested.
+# Time complexity: O(n^2).
+"""
+This function takes a list and returns it sorted in ascending order using
+the bubble sort algorithm.
+
+I hope this helps! Let me know if you have any questions.
+"""
+
+```python
+def bubble_sort(lst):
+    n = len(lst)
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if lst[j] > lst[j + 1]:
+                lst[j], lst[j + 1] = lst[j + 1], lst[j]
+    return lst
+```
+
+# Example usage:
+print(bubble_sort([3, 1, 4, 1, 5]))
+'''
+
+
+# Assignment B: legitimate code that nonetheless trips leakage rules — the
+# false-positive showcase for the limitations chapter.
+_FP_DOCS_TUTORIAL = '''\
+"""
+This function takes a list and returns its reverse.
+Example usage:
+    >>> reverse([1, 2, 3])
+    [3, 2, 1]
+"""
+
+def reverse(lst):
+    return lst[::-1]
+'''
+
+_FP_AI_TOPIC = '''\
+# A small linear regression toy for a homework about how AI language models
+# learn from data. As an AI language model would put it: minimize loss.
+def fit(xs, ys):
+    n = len(xs)
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    den = sum((x - mean_x) ** 2 for x in xs)
+    slope = num / den
+    return slope, mean_y - slope * mean_x
+'''
+
+_FP_FENCE_IN_DOCSTRING = '''\
+def parse_markdown_code_blocks(text):
+    """Strip ``` fences from a markdown string and return inner code.
+
+    ```python
+    parse_markdown_code_blocks("```\\nx = 1\\n```")
+    ```
+    """
+    out = []
+    inside = False
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            inside = not inside
+            continue
+        if inside:
+            out.append(line)
+    return "\\n".join(out)
+'''
+
+_FP_NOTES_HONEST = '''\
+# Note: edge case for empty input handled below.
+def average(xs):
+    if not xs:
+        return 0.0
+    return sum(xs) / len(xs)
+
+# Note: another helper, deliberately separate for testability.
+def variance(xs, mean):
+    return sum((x - mean) ** 2 for x in xs) / max(len(xs), 1)
+'''
+
+
+# Assignment C: four distinct, honest implementations of fib(n). None
+# should fire either signal. One submission is empty to exercise the
+# no-attachment extraction path.
+_FIB_ITERATIVE = '''\
+def fib(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a
+'''
+
+_FIB_RECURSIVE = '''\
+def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+'''
+
+_FIB_MEMO = '''\
+def fib(n, _cache={0: 0, 1: 1}):
+    if n not in _cache:
+        _cache[n] = fib(n - 1) + fib(n - 2)
+    return _cache[n]
+'''
 
 
 _ASSIGNMENT_SUBS: dict[str, list[_DemoSub]] = {
     "assignment-a": [
-        # acc1: original honest essay
-        _DemoSub("a-anna", _STUDENTS[0], _ORIGINAL_TEXT),
-        # acc2: copied from a web source — Phase 4 (CopyLeaks) target
-        _DemoSub(
-            "a-boris",
-            _STUDENTS[1],
-            "Climate change includes both global warming driven by human "
-            "emissions of greenhouse gases and the resulting large-scale "
-            "shifts in weather patterns. Though there have been previous "
-            "periods of climatic change, since the mid-20th century humans "
-            "have had an unprecedented impact on Earth's climate system.",
-        ),
-        # acc3: AI-pasted with multiple leakage signals — the Phase 1 true positive
-        _DemoSub(
-            "a-cyril",
-            _STUDENTS[2],
-            "Certainly! Here's an essay on climate change.\n\n"
-            "As an AI language model, I should note that climate change is one "
-            "of the most significant challenges of our time. The primary cause "
-            "is the emission of greenhouse gases. My knowledge cutoff is 2023.",
-        ),
-        # acc4: copies acc1 verbatim — Phase 2 (cohort) target
-        _DemoSub("a-daria", _STUDENTS[3], _ORIGINAL_TEXT),
+        _DemoSub("a-anna", _STUDENTS[0], _BUBBLE_ORIGINAL),
+        _DemoSub("a-boris", _STUDENTS[1], _BUBBLE_WEB_COPY),
+        _DemoSub("a-cyril", _STUDENTS[2], _BUBBLE_AI_PASTED),
+        _DemoSub("a-daria", _STUDENTS[3], _BUBBLE_RENAMED),
     ],
     "assignment-b": [
-        # FP 1: essay legitimately about LLMs, contains "as an AI language model"
-        _DemoSub(
-            "b-anna",
-            _STUDENTS[0],
-            "The phrase \"as an AI language model\" has become cultural "
-            "shorthand for evasive, hedged writing. Critics use it to mock "
-            "corporate prose; researchers use it to spot pasted ChatGPT "
-            "output. Both groups are right for different reasons.",
-        ),
-        # FP 2: a writing-skills tutorial that legitimately demonstrates the
-        # exact placeholder syntax our rule is designed to catch. The rule
-        # cannot tell "student pasted a template" from "student wrote a
-        # tutorial *about* the template" — a defensible limitation.
-        _DemoSub(
-            "b-boris",
-            _STUDENTS[1],
-            "When you write a cover letter, start by replacing [Your Name] "
-            "at the top with your full name. Then update [Date] with today's "
-            "date in long form, and the [Company] placeholder with the "
-            "recipient's organization. Always proofread.",
-        ),
-        # FP 3: tutorial that quotes a prompt template
-        _DemoSub(
-            "b-cyril",
-            _STUDENTS[2],
-            "When configuring a custom GPT, please enter your name into the "
-            "system prompt template. The following is an essay about how to "
-            "structure prompts so that the assistant behaves predictably.",
-        ),
-        # FP 4: film review with assistant-style opener
-        _DemoSub(
-            "b-daria",
-            _STUDENTS[3],
-            "Certainly, here is my take on Dune Part Two: it is a rare "
-            "sequel that earns its scale. Villeneuve's restraint with the "
-            "spectacle is exactly what the source material asks for.",
-        ),
+        _DemoSub("b-anna", _STUDENTS[0], _FP_DOCS_TUTORIAL),
+        _DemoSub("b-boris", _STUDENTS[1], _FP_AI_TOPIC),
+        _DemoSub("b-cyril", _STUDENTS[2], _FP_FENCE_IN_DOCSTRING),
+        _DemoSub("b-daria", _STUDENTS[3], _FP_NOTES_HONEST),
     ],
     "assignment-c": [
-        _DemoSub(
-            "c-anna",
-            _STUDENTS[0],
-            "Photosynthesis is the process by which green plants convert "
-            "sunlight into chemical energy stored in glucose. Chloroplasts "
-            "contain chlorophyll, which absorbs light primarily in the blue "
-            "and red wavelengths.",
-        ),
-        _DemoSub(
-            "c-boris",
-            _STUDENTS[1],
-            "The French Revolution of 1789 reshaped European political "
-            "order. The fall of the Bastille on 14 July became the symbolic "
-            "break with the old regime and is still commemorated each year.",
-        ),
-        _DemoSub(
-            "c-cyril",
-            _STUDENTS[2],
-            "Newton's three laws describe the relationship between forces "
-            "and motion. An object at rest stays at rest unless acted upon "
-            "by an external force; force equals mass times acceleration; "
-            "every action has an equal and opposite reaction.",
-        ),
-        # Daria turned in with no attachment — exercises the empty-submission path
-        _DemoSub("c-daria", _STUDENTS[3], ""),
+        _DemoSub("c-anna", _STUDENTS[0], _FIB_ITERATIVE),
+        _DemoSub("c-boris", _STUDENTS[1], _FIB_RECURSIVE),
+        _DemoSub("c-cyril", _STUDENTS[2], _FIB_MEMO),
+        _DemoSub("c-daria", _STUDENTS[3], ""),  # empty — extraction-error path
     ],
 }
 
 
 class DemoClient:
-    """Drop-in replacement for ClassroomClient that serves synthetic data."""
-
     def list_courses(self) -> list[Course]:
         return [_COURSE]
 
@@ -175,7 +234,7 @@ class DemoClient:
                 attachments.append(
                     DriveAttachment(
                         file_id=sub.sid,
-                        title=f"{sub.student_name} — submission.txt",
+                        title=f"{sub.student_name} — solution.py",
                         mime_type=sub.mime_type,
                     )
                 )

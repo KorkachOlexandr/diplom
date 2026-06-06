@@ -10,119 +10,127 @@ evaluation sets (see Chapter B of the thesis). Rules without measured
 operating points have not yet been evaluated; this is tracked as work
 in progress.
 
-**Total rules registered:** 17 across 6 families.
+**Total rules registered:** 19 across 4 families.
+
+## Family: `llm_boilerplate` (3 rules)
+
+### `boilerplate.example_usage_comment` — Boilerplate: 'Example usage:' comment block
+
+LLMs love to append demonstration call sites under a '# Example usage:' header. Plenty of real students also do this, so this rule is one piece of a wider picture rather than a standalone verdict.
+
+- Operating point: not yet measured.
+
+### `boilerplate.note_blocks_repeated` — Boilerplate: multiple 'Note:' comment blocks
+
+Two or more '# Note:' / '"""Note:' blocks in the same file. LLMs love adding sidenotes after every other function. Required threshold of two suppresses the single-note false positive.
+
+- Operating point: not yet measured.
+
+### `boilerplate.time_complexity_inline` — Boilerplate: inline 'Time complexity: O(...)' comment
+
+Inline complexity annotations are a strong tell of LLM-generated explanations dropped into a comment. Honest students more often discuss complexity in prose or skip it entirely.
+
+- Operating point: not yet measured.
+
+## Family: `llm_comment` (9 rules)
+
+### `comment.as_an_ai` — Comment: 'As an AI language model...'
+
+Self-identification of an LLM caught inside a comment. Essentially never written by humans.
+
+- Operating point: not yet measured.
+
+### `comment.certainly_heres` — Comment: 'Certainly! Here is...'
+
+ChatGPT/Claude preamble landing inside a comment block or docstring, e.g. '# Certainly! Here is your sorting function.'
+
+- Operating point: not yet measured.
+
+### `comment.explanation_block` — Comment: 'This function does X' explanatory preamble
+
+Long explanatory natural-language comment preceding a function, matching the pedagogical-explanation style LLMs default to: 'This function takes X and returns Y. It works by ...'.
+
+- Operating point: not yet measured.
+
+### `comment.heres_the` — Comment: 'Here's the [function|code|solution]...'
+
+Service-language comment pasted from an LLM reply: '# Here's the function you requested', '// Here is the code:'. Near-zero false-positive rate in student code.
+
+- Operating point: not yet measured.
+
+### `comment.i_hope_this_helps` — Comment: 'I hope this helps' sign-off
+
+Service-style sign-off LLMs append to coding replies ('I hope this helps!', 'Hope this helps!', 'Let me know if you have any questions'), pasted into the source unchanged. Prefix-free by design — the phrase is distinctive enough that it indicates LLM origin whether it lands in a # comment or inside a triple-quoted docstring block.
+
+- Operating point: not yet measured.
+
+### `comment.ua_as_language_model` — Ukrainian comment: 'Як мовна модель / штучний інтелект'
+
+Ukrainian translation of the canonical AI self-disclosure, landed inside a comment. Forms: «Як мовна модель», «Як ШІ», «Як штучний інтелект».
+
+- Operating point: not yet measured.
+
+### `comment.ua_os_funktsiya` — Ukrainian comment: 'Ось функція/код/розв'язок...'
+
+Service-language Ukrainian comment from an LLM reply pasted into source: «# Ось функція, яку ви просили», «# Ось код для…», «# Ось розв'язок». Direct counterpart to the English comment.heres_the rule.
+
+- Operating point: not yet measured.
+
+### `comment.ua_spodivaius_dopomozhe` — Ukrainian comment: 'Сподіваюся, це допоможе' sign-off
+
+Service-style Ukrainian sign-off LLMs append to replies, left in a comment: «# Сподіваюся, це допоможе!», «# Якщо є питання — звертайтеся».
+
+- Operating point: not yet measured.
+
+### `comment.ua_zvychaino_in_comment` — Ukrainian comment: 'Звичайно/Звісно! Ось...'
+
+Ukrainian-localized assistant preamble caught in a comment: «# Звичайно! Ось ваша функція…», «# Звісно, ось код…».
+
+- Operating point: not yet measured.
 
 ## Family: `markdown_leak` (3 rules)
 
-### `markdown.bold_in_prose` — Markdown bold in plain prose (3+ occurrences)
+### `markdown.bold_in_code` — Markdown **bold** prose in source (2+ occurrences)
 
-Multiple **bold** spans in a context that isn't being rendered as Markdown. Common when students paste LLM output into a plain Doc without stripping the asterisks. Threshold of three suppresses false positives from students who legitimately know Markdown.
-
-- Operating point: not yet measured.
-
-### `markdown.code_fences_in_prose` — Triple-backtick fences in a non-code submission
-
-Two or more ``` fences appearing in an otherwise prose submission. Very rare outside of pasted LLM responses.
+Multiple **bold** spans on prose-style lines inside a source file. Suppresses Python `x ** 2` operator chains by ignoring occurrences whose line starts with an operator character. Designed to surface pasted LLM markdown that survives the copy.
 
 - Operating point: not yet measured.
 
-### `markdown.headings_in_prose` — Markdown headings in plain prose (2+ occurrences)
+### `markdown.code_fence_in_source` — Markdown ``` fence left in a source file
 
-Multiple lines starting with `#`/`##`/`###` in a submission that isn't being rendered as Markdown. Strong LLM-output signature.
-
-- Operating point: not yet measured.
-
-## Family: `policy` (3 rules)
-
-### `policy.cannot_browse` — Capability disclosure: 'I can't browse the internet'
-
-LLM-specific tool-availability disclaimer. Pasted verbatim from chat replies.
+Triple-backtick lines in a .py / .cpp / .java file. No legitimate program contains these; they're the unambiguous footprint of a student copying the LLM chat UI verbatim.
 
 - Operating point: not yet measured.
 
-### `policy.im_sorry_but` — Refusal opener: 'I'm sorry, but I cannot/can't...'
+### `markdown.language_fence_in_source` — Markdown ```python fence in source
 
-Stock LLM refusal lede. Very high precision — humans almost never apologize this way in essay-style writing.
-
-- Operating point: not yet measured.
-
-### `policy.no_realtime` — Capability disclosure: 'no access to real-time information'
-
-Standard LLM capability disclaimer. Distinctive enough that no human writer produces this phrasing in a school essay.
+Language-tagged fences specifically (```python, ```java, ```cpp). High-confidence superset of the bare-fence rule for thesis evidence tables.
 
 - Operating point: not yet measured.
 
-## Family: `preamble` (3 rules)
+## Family: `policy` (4 rules)
 
-### `preamble.certainly_heres` — Assistant preamble: 'Certainly! Here is/are...'
+### `policy.cannot_provide_in_comment` — Comment: 'I cannot provide [implementation|code|...]'
 
-Opening assistant-style preamble characteristic of ChatGPT / Claude responses. Students copying without editing leave this in.
-
-- Operating point: not yet measured.
-
-### `preamble.happy_to_help` — Assistant preamble: 'I'd be happy to...'
-
-Service-language opener typical of LLM responses.
+LLM refusal to produce code, left as a comment header on a stub function. Useful for catching half-completed submissions with the explanation copied verbatim.
 
 - Operating point: not yet measured.
 
-### `preamble.heres_a` — Assistant preamble: 'Here's a/an ...essay/summary/...'
+### `policy.im_sorry_but_in_comment` — Comment: 'I'm sorry, but I cannot...'
 
-Opening 'Here's a/an [essay|summary|response|analysis|...]' framing — common when an LLM is asked to write a piece and the student pastes the reply.
-
-- Operating point: not yet measured.
-
-## Family: `refusal` (3 rules)
-
-### `refusal.as_an_ai` — Self-identification: 'As an AI language model...'
-
-The textbook LLM self-disclosure. Essentially never written by humans.
+Refusal lede pasted into a comment or docstring. Very high precision.
 
 - Operating point: not yet measured.
 
-### `refusal.i_cannot` — Refusal artifact: 'I cannot/can't [provide|generate]...'
+### `policy.knowledge_cutoff_in_comment` — Comment: knowledge-cutoff disclosure
 
-LLM refusal phrasing left in the pasted output. Students copying a partial refusal often leave the opener intact.
-
-- Operating point: not yet measured.
-
-### `refusal.knowledge_cutoff` — Knowledge-cutoff disclosure
-
-Phrases like 'my knowledge cutoff is...' or 'as of my last update' are LLM-specific disclaimers.
+'My knowledge cutoff is …' or 'as of my last update …' in a comment. LLM-specific disclaimer with effectively zero false-positive rate.
 
 - Operating point: not yet measured.
 
-## Family: `self_id` (3 rules)
+### `policy.ua_na_zhal` — Ukrainian comment: 'На жаль, я не можу...'
 
-### `self_id.developed_by` — Self-identification: 'developed/created by [vendor]'
-
-Vendor attribution that an LLM emits when describing itself. Filters to the specific vendors that ship public LLMs.
-
-- Operating point: not yet measured.
-
-### `self_id.named_model` — Self-identification: 'I am [ChatGPT|Claude|Gemini|...]'
-
-First-person reference to a specific LLM product name. Catches submissions where the student left in a model's self-introduction.
-
-- Operating point: not yet measured.
-
-### `self_id.trained_by` — Self-identification: 'trained by [OpenAI|Anthropic|...]'
-
-Provenance disclosure typical of LLM responses to 'who made you'. Extremely rare in human writing.
-
-- Operating point: not yet measured.
-
-## Family: `template` (2 rules)
-
-### `template.bracket_placeholder` — Unfilled bracket placeholder: '[Your Name]', '[Insert Date]', ...
-
-Square-bracket placeholders that students forget to fill in. High precision; the bracket form is uncommon in normal prose.
-
-- Operating point: not yet measured.
-
-### `template.instruction_echo` — Instruction echo: prompt-like phrasing left in the submission
-
-Phrases like 'Please enter your name', 'Write an essay about', or 'The following is an essay about ...' indicate the student pasted the prompt back instead of removing it.
+Ukrainian refusal opener pasted into a comment: «# На жаль, я не можу надати повний код…».
 
 - Operating point: not yet measured.
 

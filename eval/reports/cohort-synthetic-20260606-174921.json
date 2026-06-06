@@ -1,0 +1,32 @@
+{
+  "n_examples": 100,
+  "by_relation": {
+    "unrelated": {
+      "n": 60,
+      "winnow_detected_at_0.3": 0,
+      "ast_detected_at_0.3": 0,
+      "combined_detected_at_0.3": 0
+    },
+    "exact_copy": {
+      "n": 15,
+      "winnow_detected_at_0.3": 15,
+      "ast_detected_at_0.3": 15,
+      "combined_detected_at_0.3": 15
+    },
+    "reordered": {
+      "n": 10,
+      "winnow_detected_at_0.3": 10,
+      "ast_detected_at_0.3": 10,
+      "combined_detected_at_0.3": 10
+    },
+    "renamed": {
+      "n": 15,
+      "winnow_detected_at_0.3": 15,
+      "ast_detected_at_0.3": 15,
+      "combined_detected_at_0.3": 15
+    }
+  },
+  "auc_winnow": 1.0,
+  "auc_ast": 1.0,
+  "auc_combined": 1.0
+}

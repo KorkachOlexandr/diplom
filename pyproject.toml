@@ -1,8 +1,10 @@
 [project]
 name = "diplom"
 version = "0.1.0"
-description = "Anti-plagiarism screening tool for Google Classroom"
+description = "Code-plagiarism screening for Google Classroom programming assignments"
 requires-python = ">=3.11"
+# Cohort signal (winnowing + AST hashing) uses only the stdlib: Python's
+# tokenize and ast modules. No NLP libraries needed for the core algorithm.
 dependencies = [
     "streamlit>=1.32",
     "google-api-python-client>=2.120",
@@ -12,22 +14,11 @@ dependencies = [
     "python-docx>=1.1",
     "pydantic>=2.6",
     "requests>=2.31",
-    "datasketch>=1.6",
-    "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
-# Sentence-embedding paraphrase channel (Phase 2). Heavy: ~1.5GB with torch
-# and a one-time model download. MinHash channel works without this.
-embeddings = [
-    "sentence-transformers>=2.5",
-]
-# CopyLeaks webhook receiver (Phase 4).
-webhook = [
-    "fastapi>=0.110",
-    "uvicorn>=0.30",
-]
-# Evaluation chapter.
+# Optional Moss/JPlag client integration would live here in the future;
+# for now the web-check signal is intentionally stubbed.
 eval = [
     "scikit-learn>=1.4",
     "pandas>=2.2",

@@ -18,7 +18,7 @@ class LeakageHit(BaseModel):
 class CohortMatch(BaseModel):
     other_submission_id: str
     other_student_name: str
-    channel: Literal["minhash", "embedding"]
+    channel: Literal["winnowing", "ast"]
     score: float
     this_span: tuple[int, int]
     other_span: tuple[int, int]

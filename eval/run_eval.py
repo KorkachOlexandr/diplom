@@ -1,14 +1,10 @@
-"""Evaluation harness for the thesis.
+"""Evaluation harness for the thesis (code-plagiarism edition).
 
 Usage:
-    # Synthetic-only — runs immediately, no external downloads.
+    # Synthetic-only — runs immediately, stdlib only.
     python -m eval.run_eval --signal ai_leakage --synthetic
     python -m eval.run_eval --signal cohort --synthetic
     python -m eval.run_eval --system mixed --synthetic
-
-    # External datasets (download separately).
-    python -m eval.run_eval --signal ai_leakage --dataset hc3 --hc3-path data/hc3.jsonl
-    python -m eval.run_eval --signal cohort --dataset pan --pan-dir data/pan/
 
 Reports are written to eval/reports/ as JSON for the thesis.
 """
@@ -22,14 +18,10 @@ from datetime import datetime
 from pathlib import Path
 
 from app.signals.ai_leakage import detect, registered_rules
-from app.signals.cohort.shingles import (
-    longest_matching_span,
-    near_duplicate_pairs,
-)
-from eval.datasets.synthetic import (
-    generate_ai_leakage,
-    generate_cohort,
-)
+from app.signals.cohort.ast_hash import compare_subtrees, subtree_hashes
+from app.signals.cohort.tokenize_code import tokenize_source
+from app.signals.cohort.winnowing import compare_submissions, fingerprints
+from eval.datasets.synthetic import generate_ai_leakage, generate_cohort
 from eval.metrics import PRFScore, prf, roc_auc
 
 
@@ -58,14 +50,10 @@ def eval_ai_leakage_synthetic(seed: int = 0) -> dict:
     overall_y_pred: list[bool] = []
 
     for ex in examples:
-        hits = detect(ex.text)
-        fired = {h.rule_id for h in hits}
-        any_fired = bool(fired)
+        fired = {h.rule_id for h in detect(ex.text)}
         overall_y_true.append(ex.is_positive)
-        overall_y_pred.append(any_fired)
+        overall_y_pred.append(bool(fired))
 
-        # Per-rule book-keeping. A rule's "positive class" is the synthetic
-        # examples labeled with its rule_id.
         for rid in rule_ids:
             is_target = ex.expected_rule_id == rid
             fired_here = rid in fired
@@ -79,9 +67,7 @@ def eval_ai_leakage_synthetic(seed: int = 0) -> dict:
     per_rule: dict[str, dict] = {}
     for r in rules:
         score = PRFScore.from_counts(
-            tp=per_rule_tp[r.id],
-            fp=per_rule_fp[r.id],
-            fn=per_rule_fn[r.id],
+            tp=per_rule_tp[r.id], fp=per_rule_fp[r.id], fn=per_rule_fn[r.id]
         )
         per_rule[r.id] = {
             "name": r.name,
@@ -107,85 +93,95 @@ def eval_ai_leakage_synthetic(seed: int = 0) -> dict:
     }
 
 
-def eval_ai_leakage_hc3(path: str, limit: int | None = None) -> dict:
-    from eval.datasets.hc3 import load_hc3
-
-    examples = load_hc3(path, limit=limit)
-    y_true: list[bool] = []
-    y_score: list[float] = []
-    y_pred: list[bool] = []
-    for ex in examples:
-        hits = detect(ex.text)
-        y_true.append(ex.is_ai)
-        y_score.append(float(len(hits)))
-        y_pred.append(bool(hits))
-    score = prf(y_true, y_pred)
-    return {
-        "n_examples": len(examples),
-        "n_ai": sum(y_true),
-        "precision": score.precision,
-        "recall": score.recall,
-        "f1": score.f1,
-        "auc": roc_auc(y_true, y_score),
-    }
-
-
 # ---------- Cohort evaluation ----------
 
 def eval_cohort_synthetic(seed: int = 0) -> dict:
     examples = generate_cohort(seed=seed)
-    # For each example pair, run the MinHash channel directly.
-    y_true: list[bool] = []  # whether the pair is exact_copy or paraphrase
-    y_score: list[float] = []  # estimated jaccard from MinHash
 
-    minhash_pairs_lookup: dict[tuple[str, str], float] = {}
-    submissions = []
+    # Build a flat (id, text) list and pairwise lookup of the relation.
+    submissions: list[tuple[str, str]] = []
+    relation_by_pair: dict[tuple[str, str], str] = {}
     for ex in examples:
         submissions.append((ex.id_a, ex.text_a))
         submissions.append((ex.id_b, ex.text_b))
+        key = tuple(sorted((ex.id_a, ex.id_b)))
+        relation_by_pair[key] = ex.relation
 
-    pairs = near_duplicate_pairs(submissions, threshold=0.1)
-    for id_a, id_b, jaccard in pairs:
-        key = tuple(sorted((id_a, id_b)))
-        minhash_pairs_lookup[key] = max(minhash_pairs_lookup.get(key, 0.0), jaccard)
+    # Winnowing channel.
+    fps_by_sub = []
+    for sid, text in submissions:
+        try:
+            tokens = tokenize_source(text)
+        except Exception:
+            tokens = []
+        fps_by_sub.append((sid, fingerprints(tokens)))
+    winnow_pairs = {
+        tuple(sorted((a, b))): m.score
+        for a, b, m in compare_submissions(fps_by_sub, min_score=0.0)
+    }
 
-    n_copy_detected = 0
-    n_paraphrase_detected = 0
+    # AST channel.
+    ast_by_sub = [(sid, subtree_hashes(text)) for sid, text in submissions]
+    ast_pairs = {
+        tuple(sorted((a, b))): m.score
+        for a, b, m in compare_subtrees(ast_by_sub, min_score=0.0)
+    }
+
+    rows: list[dict] = []
+    y_true_related: list[bool] = []
+    y_winnow: list[float] = []
+    y_ast: list[float] = []
+    y_combined: list[float] = []
+
     for ex in examples:
         key = tuple(sorted((ex.id_a, ex.id_b)))
-        score = minhash_pairs_lookup.get(key, 0.0)
-        is_related = ex.relation in ("exact_copy", "paraphrase")
-        y_true.append(is_related)
-        y_score.append(score)
-        if score > 0.5:
-            if ex.relation == "exact_copy":
-                n_copy_detected += 1
-            elif ex.relation == "paraphrase":
-                n_paraphrase_detected += 1
+        w_score = winnow_pairs.get(key, 0.0)
+        a_score = ast_pairs.get(key, 0.0)
+        combined = max(w_score, a_score)
+        is_related = ex.relation in ("exact_copy", "renamed", "reordered")
+        y_true_related.append(is_related)
+        y_winnow.append(w_score)
+        y_ast.append(a_score)
+        y_combined.append(combined)
+        rows.append(
+            {
+                "relation": ex.relation,
+                "winnow": w_score,
+                "ast": a_score,
+                "combined": combined,
+            }
+        )
+
+    by_rel: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_rel[r["relation"]].append(r)
+
+    relation_summary = {}
+    for rel, items in by_rel.items():
+        w_detected = sum(1 for it in items if it["winnow"] > 0.3)
+        a_detected = sum(1 for it in items if it["ast"] > 0.3)
+        c_detected = sum(1 for it in items if it["combined"] > 0.3)
+        relation_summary[rel] = {
+            "n": len(items),
+            "winnow_detected_at_0.3": w_detected,
+            "ast_detected_at_0.3": a_detected,
+            "combined_detected_at_0.3": c_detected,
+        }
 
     return {
         "n_examples": len(examples),
-        "n_exact_copy": sum(1 for e in examples if e.relation == "exact_copy"),
-        "n_paraphrase": sum(1 for e in examples if e.relation == "paraphrase"),
-        "n_unrelated": sum(1 for e in examples if e.relation == "unrelated"),
-        "exact_copy_detected_at_0.5": n_copy_detected,
-        "paraphrase_detected_at_0.5": n_paraphrase_detected,
-        "auc": roc_auc(y_true, y_score),
-        "note": (
-            "AUC reflects MinHash channel only. Embedding channel (Phase 2) "
-            "would dominate the paraphrase column; left to a future run with "
-            "sentence-transformers installed."
-        ),
+        "by_relation": relation_summary,
+        "auc_winnow": roc_auc(y_true_related, y_winnow),
+        "auc_ast": roc_auc(y_true_related, y_ast),
+        "auc_combined": roc_auc(y_true_related, y_combined),
     }
 
 
-# ---------- System-level (mixed) ----------
+# ---------- System-level ----------
 
 def eval_system_mixed(seed: int = 0) -> dict:
-    """Build a simulated assignment with mixed-suspicion submissions and
-    check that the ranker places the truly suspicious ones at the top."""
-    # Currently uses synthetic AI-leakage examples only; cohort fusion goes
-    # in once we wire the runner into this harness directly.
+    """Combine AI-leakage detection scores with cohort scores into a single
+    ranking, then check that suspicious submissions land at the top."""
     examples = generate_ai_leakage(seed=seed)
     y_true: list[bool] = []
     y_score: list[float] = []
@@ -206,50 +202,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--signal", choices=["ai_leakage", "cohort"])
     parser.add_argument("--system", choices=["mixed"])
     parser.add_argument("--synthetic", action="store_true")
-    parser.add_argument("--dataset", choices=["hc3", "pan"])
-    parser.add_argument("--hc3-path", type=str)
-    parser.add_argument("--pan-dir", type=str)
-    parser.add_argument("--limit", type=int)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)
 
     if args.signal == "ai_leakage":
-        if args.synthetic:
-            payload = eval_ai_leakage_synthetic(seed=args.seed)
-            name = "ai_leakage-synthetic"
-        elif args.dataset == "hc3":
-            if not args.hc3_path:
-                parser.error("--hc3-path required with --dataset hc3")
-            payload = eval_ai_leakage_hc3(args.hc3_path, limit=args.limit)
-            name = "ai_leakage-hc3"
-        else:
-            parser.error("provide --synthetic or --dataset")
-        out_path = _write_report(name, payload)
-        _print_summary(name, payload)
-        print(f"\nWritten: {out_path}")
-        return 0
-
-    if args.signal == "cohort":
-        if args.synthetic:
-            payload = eval_cohort_synthetic(seed=args.seed)
-            name = "cohort-synthetic"
-        else:
-            parser.error("cohort eval currently supports --synthetic only")
-        out_path = _write_report(name, payload)
-        _print_summary(name, payload)
-        print(f"\nWritten: {out_path}")
-        return 0
-
-    if args.system == "mixed":
+        if not args.synthetic:
+            parser.error("only --synthetic mode is implemented for now")
+        payload = eval_ai_leakage_synthetic(seed=args.seed)
+        name = "ai_leakage-synthetic"
+    elif args.signal == "cohort":
+        if not args.synthetic:
+            parser.error("only --synthetic mode is implemented for now")
+        payload = eval_cohort_synthetic(seed=args.seed)
+        name = "cohort-synthetic"
+    elif args.system == "mixed":
         payload = eval_system_mixed(seed=args.seed)
         name = "system-mixed"
-        out_path = _write_report(name, payload)
-        _print_summary(name, payload)
-        print(f"\nWritten: {out_path}")
-        return 0
+    else:
+        parser.print_help()
+        return 1
 
-    parser.print_help()
-    return 1
+    out_path = _write_report(name, payload)
+    _print_summary(name, payload)
+    print(f"\nWritten: {out_path}")
+    return 0
 
 
 def _print_summary(name: str, payload: dict) -> None:
@@ -268,6 +244,21 @@ def _print_summary(name: str, payload: dict) -> None:
             f"{'OVERALL':<45} {'(any rule)':<15} "
             f"{o['precision']:>6.3f} {o['recall']:>6.3f} {o['f1']:>6.3f}"
         )
+    elif "by_relation" in payload:
+        print(f"{'relation':<15} {'n':>5} {'winnow':>8} {'ast':>6} {'combined':>10}")
+        print("-" * 50)
+        for rel in ("exact_copy", "renamed", "reordered", "unrelated"):
+            if rel in payload["by_relation"]:
+                d = payload["by_relation"][rel]
+                print(
+                    f"{rel:<15} {d['n']:>5} "
+                    f"{d['winnow_detected_at_0.3']:>8} "
+                    f"{d['ast_detected_at_0.3']:>6} "
+                    f"{d['combined_detected_at_0.3']:>10}"
+                )
+        print(f"\nAUC (winnow): {payload['auc_winnow']:.3f}")
+        print(f"AUC (ast):    {payload['auc_ast']:.3f}")
+        print(f"AUC (max):    {payload['auc_combined']:.3f}")
     else:
         for k, v in payload.items():
             print(f"  {k}: {v}")

@@ -3,6 +3,23 @@ from __future__ import annotations
 import io
 
 
+# Code source files. Drive labels these with text/x-* depending on
+# extension, and sometimes returns application/octet-stream for unfamiliar
+# code; we treat anything whose extension or MIME hints at source code as
+# plain text and let the cohort signal language-detect from there.
+_CODE_MIME_TYPES = {
+    "text/x-python",
+    "text/x-python-script",
+    "text/x-script.python",
+    "text/x-c",
+    "text/x-c++",
+    "text/x-java",
+    "text/x-java-source",
+    "text/javascript",
+    "application/javascript",
+    "text/x-script.javascript",
+}
+
 SUPPORTED_MIME_TYPES = {
     "application/vnd.google-apps.document",
     "application/vnd.google-apps.presentation",
@@ -10,7 +27,7 @@ SUPPORTED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "text/plain",
     "text/markdown",
-}
+} | _CODE_MIME_TYPES
 
 
 class UnsupportedMimeError(ValueError):
@@ -25,7 +42,7 @@ def extract_text(data: bytes, mime_type: str) -> str:
     """
     if mime_type.startswith("application/vnd.google-apps."):
         return _decode_text(data)
-    if mime_type in ("text/plain", "text/markdown"):
+    if mime_type in ("text/plain", "text/markdown") or mime_type in _CODE_MIME_TYPES:
         return _decode_text(data)
     if mime_type == "application/pdf":
         return _extract_pdf(data)

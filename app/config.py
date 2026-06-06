@@ -13,19 +13,9 @@ class Settings(BaseModel):
     token_path: Path = REPO_ROOT / "token.json"
     db_path: Path = REPO_ROOT / "data" / "diplom.sqlite"
 
-    embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
-
-    copyleaks_email: str | None = None
-    copyleaks_api_key: str | None = None
-    copyleaks_webhook_url: str | None = None  # public base URL for CopyLeaks callbacks
-
     @property
     def has_google_credentials(self) -> bool:
         return self.credentials_path.exists()
-
-    @property
-    def has_copyleaks(self) -> bool:
-        return bool(self.copyleaks_email and self.copyleaks_api_key)
 
 
 settings = Settings()
