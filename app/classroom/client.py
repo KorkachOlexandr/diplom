@@ -61,19 +61,34 @@ class ClassroomClient:
         return cls(classroom, drive)
 
     def list_courses(self) -> list[Course]:
-        resp = self._classroom.courses().list(courseStates=["ACTIVE"]).execute()
+        # Filter to courses where the current user is a teacher — this tool is
+        # instructor-facing and courseWork.list returns 403 for student roles.
+        resp = (
+            self._classroom.courses()
+            .list(courseStates=["ACTIVE"], teacherId="me")
+            .execute()
+        )
         return [
             Course(id=c["id"], name=c["name"], section=c.get("section"))
             for c in resp.get("courses", [])
         ]
 
     def list_assignments(self, course_id: str) -> list[Assignment]:
-        resp = (
-            self._classroom.courses()
-            .courseWork()
-            .list(courseId=course_id)
-            .execute()
-        )
+        from googleapiclient.errors import HttpError
+
+        try:
+            resp = (
+                self._classroom.courses()
+                .courseWork()
+                .list(courseId=course_id)
+                .execute()
+            )
+        except HttpError as e:
+            # Courses where the caller lacks teacher-side access return 403;
+            # surface as "no assignments" rather than crashing the whole UI.
+            if e.resp.status in (403, 404):
+                return []
+            raise
         return [
             Assignment(
                 id=a["id"],
