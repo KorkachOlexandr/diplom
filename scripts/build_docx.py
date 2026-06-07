@@ -34,9 +34,11 @@ FIGURES_DIR = Path(__file__).resolve().parent.parent / "thesis" / "figures"
 
 # ---------- low-level helpers ----------
 
-def set_run_font(run, *, size_pt: float = 14, bold: bool = False, italic: bool = False):
+def set_run_font(run, *, size_pt: float = 14, bold: bool = False, italic: bool = False,
+                 color_hex: str = "000000"):
     """Apply Times New Roman font with explicit Eastern Asia and complex script
-    fallbacks so Cyrillic and Latin characters both render in TNR."""
+    fallbacks so Cyrillic and Latin characters both render in TNR. Default
+    color is explicit black to override Heading style's theme accent color."""
     run.font.name = "Times New Roman"
     rPr = run._element.get_or_add_rPr()
     rFonts = rPr.find(qn("w:rFonts"))
@@ -48,6 +50,15 @@ def set_run_font(run, *, size_pt: float = 14, bold: bool = False, italic: bool =
     run.font.size = Pt(size_pt)
     run.bold = bold
     run.italic = italic
+    # explicit color overrides the Heading style's default theme accent color
+    color = rPr.find(qn("w:color"))
+    if color is None:
+        color = OxmlElement("w:color")
+        rPr.append(color)
+    color.set(qn("w:val"), color_hex)
+    # clear themeColor attribute if present
+    if color.get(qn("w:themeColor")) is not None:
+        del color.attrib[qn("w:themeColor")]
 
 
 def setup_section(section, *, first_page: bool = False):
@@ -109,51 +120,172 @@ def paragraph_setup(p, *, indent_first: bool = True, alignment=WD_ALIGN_PARAGRAP
     p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
 
 
+def _add_chunk_to_paragraph(p, kind, payload, *, bold: bool = False, italic: bool = False):
+    """Render one (kind, payload) chunk into paragraph p."""
+    if kind == "math":
+        # Render LaTeX as inline OMML. Need a placeholder run to anchor
+        # surrounding formatting; insert OMML element directly into the
+        # paragraph after creating a non-empty run for layout stability.
+        anchor = p.add_run()
+        set_run_font(anchor, size_pt=14)
+        add_omml_inline(anchor, payload)
+        # Remove the empty anchor to avoid an extra blank run-cycle
+        return
+
+    if kind == "mono":
+        run = p.add_run(payload)
+        run.font.name = "Courier New"
+        rPr = run._element.get_or_add_rPr()
+        rFonts = rPr.find(qn("w:rFonts"))
+        if rFonts is None:
+            rFonts = OxmlElement("w:rFonts")
+            rPr.append(rFonts)
+        for attr in ("w:ascii", "w:hAnsi", "w:cs"):
+            rFonts.set(qn(attr), "Courier New")
+        run.font.size = Pt(12)
+        # explicit black color
+        color = rPr.find(qn("w:color"))
+        if color is None:
+            color = OxmlElement("w:color")
+            rPr.append(color)
+        color.set(qn("w:val"), "000000")
+        return
+
+    is_bold = bold or kind == "bold"
+    is_italic = italic or kind == "italic"
+    run = p.add_run(payload)
+    set_run_font(run, size_pt=14, bold=is_bold, italic=is_italic)
+
+
 def add_body_paragraph(doc, text: str, *, indent: bool = True,
                        bold: bool = False, italic: bool = False,
                        alignment=WD_ALIGN_PARAGRAPH.JUSTIFY):
     p = doc.add_paragraph()
     paragraph_setup(p, indent_first=indent, alignment=alignment)
-    # parse simple inline formatting: **bold**, *italic*, `code`
-    for chunk_text, chunk_bold, chunk_italic, chunk_mono in _split_inline(text):
-        run = p.add_run(chunk_text)
-        if chunk_mono:
-            run.font.name = "Courier New"
-            rPr = run._element.get_or_add_rPr()
-            rFonts = rPr.find(qn("w:rFonts"))
-            if rFonts is None:
-                rFonts = OxmlElement("w:rFonts")
-                rPr.append(rFonts)
-            for attr in ("w:ascii", "w:hAnsi", "w:cs"):
-                rFonts.set(qn(attr), "Courier New")
-            run.font.size = Pt(12)
-        else:
-            set_run_font(run, size_pt=14, bold=bold or chunk_bold, italic=italic or chunk_italic)
+    for kind, payload in _split_inline(text):
+        _add_chunk_to_paragraph(p, kind, payload, bold=bold, italic=italic)
     return p
 
 
 _INLINE_RE = re.compile(
     r"(\*\*(?P<bold>[^*]+)\*\*)|"
     r"(\*(?P<italic>[^*]+)\*)|"
-    r"(`(?P<mono>[^`]+)`)"
+    r"(`(?P<mono>[^`]+)`)|"
+    r"(\$(?P<math>[^$]+)\$)"
 )
 
 
 def _split_inline(text: str):
-    """Yield (text, bold, italic, mono) tuples."""
+    """Yield (kind, payload) tuples.
+
+    kind ∈ {'text', 'bold', 'italic', 'mono', 'math'}
+    payload is the inner text.
+    """
     pos = 0
     for m in _INLINE_RE.finditer(text):
         if m.start() > pos:
-            yield (text[pos:m.start()], False, False, False)
+            yield ("text", text[pos:m.start()])
         if m.group("bold") is not None:
-            yield (m.group("bold"), True, False, False)
+            yield ("bold", m.group("bold"))
         elif m.group("italic") is not None:
-            yield (m.group("italic"), False, True, False)
+            yield ("italic", m.group("italic"))
         elif m.group("mono") is not None:
-            yield (m.group("mono"), False, False, True)
+            yield ("mono", m.group("mono"))
+        elif m.group("math") is not None:
+            yield ("math", m.group("math"))
         pos = m.end()
     if pos < len(text):
-        yield (text[pos:], False, False, False)
+        yield ("text", text[pos:])
+
+
+# ---------- LaTeX → OMML via pandoc ----------
+
+import subprocess
+import zipfile
+import shutil
+import tempfile
+
+_OMML_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+_M = "{" + _OMML_NS + "}"
+
+_math_cache: dict[str, "ET._Element"] = {}
+
+
+def latex_to_omml(latex: str, *, display: bool = False) -> "ET._Element":
+    """Convert a LaTeX math expression to a Word OMML element by piping
+    through pandoc and extracting the <m:oMath> node from the resulting
+    docx. Cached per expression so repeated formulas only pay the cost
+    once per build."""
+    import lxml.etree as ET
+
+    key = ("D" if display else "I") + latex
+    if key in _math_cache:
+        return _math_cache[key]
+
+    md = ("$$" + latex + "$$") if display else ("$" + latex + "$")
+    with tempfile.TemporaryDirectory() as td:
+        src = Path(td) / "src.md"
+        dst = Path(td) / "out.docx"
+        src.write_text(md, encoding="utf-8")
+        # OMML is pandoc's default math output for docx; do not pass --mathml.
+        subprocess.run(
+            ["pandoc", "-f", "markdown", "-t", "docx",
+             "-o", str(dst), str(src)],
+            check=True, capture_output=True,
+        )
+        with zipfile.ZipFile(dst) as z:
+            doc_xml = z.read("word/document.xml")
+        parser = ET.XMLParser(remove_blank_text=False)
+        root = ET.fromstring(doc_xml, parser=parser)
+        omath = root.find(f".//{_M}oMath")
+        if omath is None:
+            raise RuntimeError(f"pandoc produced no <m:oMath> for: {latex!r}")
+        # Make a standalone deep copy
+        cloned = ET.fromstring(ET.tostring(omath))
+        _math_cache[key] = cloned
+        return cloned
+
+
+def _attach_omml(host_element, omath_element):
+    """Attach an OMML element (as lxml) into a python-docx element tree
+    (which uses python-docx's own oxml). We serialize and parse with
+    python-docx's parser to keep namespaces consistent."""
+    from docx.oxml import parse_xml
+    import lxml.etree as ET
+    xml_bytes = ET.tostring(omath_element)
+    parsed = parse_xml(xml_bytes)
+    host_element.append(parsed)
+
+
+def add_omml_inline(run, latex: str):
+    """Splice an inline OMML expression into the given run's parent paragraph
+    immediately after the run."""
+    omath = latex_to_omml(latex, display=False)
+    from docx.oxml import parse_xml
+    import lxml.etree as ET
+    xml_bytes = ET.tostring(omath)
+    parsed = parse_xml(xml_bytes)
+    # Insert after the current run
+    run._element.addnext(parsed)
+
+
+def add_omml_display(paragraph, latex: str):
+    """Append a display-style OMML expression to a paragraph."""
+    omath = latex_to_omml(latex, display=True)
+    from docx.oxml import parse_xml
+    import lxml.etree as ET
+    # display math is wrapped in oMathPara; if pandoc gave us oMath, wrap
+    if not omath.tag.endswith("}oMathPara"):
+        wrapper = ET.SubElement(ET.Element(f"{_M}oMathPara"), f"{_M}oMath")
+        # Simpler: build inline
+        wrapper = ET.fromstring(
+            f'<m:oMathPara xmlns:m="{_OMML_NS}">{ET.tostring(omath).decode()}</m:oMathPara>'
+        )
+        xml_bytes = ET.tostring(wrapper)
+    else:
+        xml_bytes = ET.tostring(omath)
+    parsed = parse_xml(xml_bytes)
+    paragraph._element.append(parsed)
 
 
 def add_top_level_heading(doc, text: str, *, page_break: bool = True):
@@ -339,16 +471,10 @@ def add_list_item(doc, text: str, *, marker: str = "—", level: int = 0):
     """Single list item, hanging indent."""
     p = doc.add_paragraph()
     paragraph_setup(p, indent_first=True, alignment=WD_ALIGN_PARAGRAPH.JUSTIFY)
-    # hanging effect: first line normal indent, continuation flush left
     p.paragraph_format.first_line_indent = Cm(1.27)
     body_text = f"{marker} {text}" if marker else text
-    for chunk_text, chunk_bold, chunk_italic, chunk_mono in _split_inline(body_text):
-        run = p.add_run(chunk_text)
-        if chunk_mono:
-            run.font.name = "Courier New"
-            run.font.size = Pt(12)
-        else:
-            set_run_font(run, size_pt=14, bold=chunk_bold, italic=chunk_italic)
+    for kind, payload in _split_inline(body_text):
+        _add_chunk_to_paragraph(p, kind, payload)
     return p
 
 
@@ -401,22 +527,29 @@ def add_table(doc, header: list[str], rows: list[list[str]], *, caption: str | N
             p = cell.paragraphs[0]
             paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.LEFT,
                             space_before=0, space_after=0, line_spacing=1.0)
-            for chunk_text, chunk_bold, chunk_italic, chunk_mono in _split_inline(cell_text):
-                run = p.add_run(chunk_text)
-                if chunk_mono:
+            for kind, payload in _split_inline(cell_text):
+                if kind == "math":
+                    anchor = p.add_run()
+                    set_run_font(anchor, size_pt=12)
+                    add_omml_inline(anchor, payload)
+                elif kind == "mono":
+                    run = p.add_run(payload)
                     run.font.name = "Courier New"
                     run.font.size = Pt(11)
+                    set_run_font(run, size_pt=11)
+                    run.font.name = "Courier New"
                 else:
-                    set_run_font(run, size_pt=12, bold=chunk_bold, italic=chunk_italic)
+                    run = p.add_run(payload)
+                    set_run_font(run, size_pt=12,
+                                 bold=(kind == "bold"),
+                                 italic=(kind == "italic"))
 
 
 def add_formula(doc, body: str, number: str | None = None):
-    """Centered formula on its own line; optional right-aligned number in parentheses."""
-    # Single tab approach: formula centered, then tab + number aligned right.
-    # We use a 1-row 2-col borderless table for reliable layout.
+    """Centered OMML formula on its own line; right-aligned number in
+    parentheses. Uses a 1×2 borderless table for layout."""
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
-    # remove all borders
     tbl = table._element
     tblPr = tbl.find(qn("w:tblPr"))
     if tblPr is None:
@@ -428,20 +561,20 @@ def add_formula(doc, body: str, number: str | None = None):
         b.set(qn("w:val"), "nil")
         tblBorders.append(b)
     tblPr.append(tblBorders)
-    # widths
     grid_cells = table.rows[0].cells
     grid_cells[0].width = Cm(14)
     grid_cells[1].width = Cm(3)
-    # formula cell
+
+    # formula cell: render the LaTeX as OMML
     fp = grid_cells[0].paragraphs[0]
     paragraph_setup(fp, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.CENTER,
-                    space_before=6, space_after=6, line_spacing=1.0)
-    frun = fp.add_run(body)
-    set_run_font(frun, size_pt=14, italic=True)
+                    space_before=6, space_after=6, line_spacing=1.5)
+    add_omml_display(fp, body)
+
     # number cell
     np_ = grid_cells[1].paragraphs[0]
     paragraph_setup(np_, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.RIGHT,
-                    space_before=6, space_after=6, line_spacing=1.0)
+                    space_before=6, space_after=6, line_spacing=1.5)
     if number:
         nrun = np_.add_run(f"({number})")
         set_run_font(nrun, size_pt=14)
@@ -456,7 +589,8 @@ LIST_LETTER_RE = re.compile(r"^([а-яґ])\)\s+(.*)$")  # «а) … б) …»
 TABLE_HEADER_RE = re.compile(r"^\|(.+)\|$")
 TABLE_SEP_RE = re.compile(r"^\|(\s*[-:]+\s*\|)+$")
 IMAGE_RE = re.compile(r"^!\[(.*?)\]\(([^)]+)\)$")
-FORMULA_BLOCK_RE = re.compile(r"^\$\$(.+?)\\tag\{([^}]+)\}\$\$$")
+FORMULA_BLOCK_TAGGED_RE = re.compile(r"^\$\$(.+?)\\tag\{([^}]+)\}\$\$$")
+FORMULA_BLOCK_PLAIN_RE = re.compile(r"^\$\$(.+?)\$\$$")
 NEWPAGE_RE = re.compile(r"^\\newpage$")
 CODE_FENCE_RE = re.compile(r"^```")
 
@@ -524,10 +658,16 @@ def parse_markdown(md: str):
             i += 1
             continue
 
-        m = FORMULA_BLOCK_RE.match(stripped)
+        m = FORMULA_BLOCK_TAGGED_RE.match(stripped)
         if m:
             flush_para()
             blocks.append({"kind": "formula", "body": m.group(1).strip(), "number": m.group(2)})
+            i += 1
+            continue
+        m = FORMULA_BLOCK_PLAIN_RE.match(stripped)
+        if m:
+            flush_para()
+            blocks.append({"kind": "formula", "body": m.group(1).strip(), "number": None})
             i += 1
             continue
 
@@ -750,9 +890,11 @@ def render_title_page(doc, blocks, start_idx):
             p = doc.add_paragraph()
         paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.CENTER,
                         space_before=space_before, space_after=space_after, line_spacing=1.5)
-        for chunk_text, chunk_bold, chunk_italic, chunk_mono in _split_inline(text):
-            run = p.add_run(chunk_text)
-            set_run_font(run, size_pt=size_pt, bold=bold or chunk_bold, italic=chunk_italic)
+        for kind, payload in _split_inline(text):
+            run = p.add_run(payload)
+            set_run_font(run, size_pt=size_pt,
+                         bold=bold or kind == "bold",
+                         italic=kind == "italic")
 
     centered_added = [False]
 
