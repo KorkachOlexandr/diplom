@@ -317,6 +317,38 @@ def add_top_level_heading(doc, text: str, *, page_break: bool = True):
     return p
 
 
+def add_appendix_title(doc, text: str):
+    """Appendix title — centered, sentence case (no uppercasing), bold,
+    no page break, sits directly under «ДОДАТОК Х»."""
+    # Normalize: drop a leading 'Назва...' style if it's accidentally uppercase
+    raw = text.strip().rstrip(".")
+    p = doc.add_paragraph()
+    pPr = p._element.get_or_add_pPr()
+    # remove any inherited firstLine indent
+    ind = pPr.find(qn("w:ind"))
+    if ind is None:
+        ind = OxmlElement("w:ind")
+        pPr.append(ind)
+    ind.set(qn("w:firstLine"), "0")
+    # center
+    jc = pPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        pPr.append(jc)
+    jc.set(qn("w:val"), "center")
+    # spacing
+    spacing = pPr.find(qn("w:spacing"))
+    if spacing is None:
+        spacing = OxmlElement("w:spacing")
+        pPr.append(spacing)
+    spacing.set(qn("w:after"), "360")  # ~18pt after
+    spacing.set(qn("w:line"), "360")   # 1.5 line spacing
+    spacing.set(qn("w:lineRule"), "auto")
+    run = p.add_run(raw)
+    set_run_font(run, size_pt=14, bold=True)
+    return p
+
+
 def add_subsection_heading(doc, text: str):
     """Subsection heading — Heading 2 style + paragraph indent + bold + TNR."""
     p = doc.add_paragraph(style=doc.styles["Heading 2"])
@@ -619,7 +651,8 @@ def add_formula(doc, body: str, number: str | None = None):
 
 # Patterns
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.*)$")
-LIST_DASH_RE = re.compile(r"^—\s+(.*)$")  # body-style list items
+LIST_DASH_RE = re.compile(r"^—\s+(.*)$")  # «— …» body-style list items
+LIST_HYPHEN_RE = re.compile(r"^-\s+(.+)$")  # «- …» plain markdown bullets
 LIST_LETTER_RE = re.compile(r"^([а-яґ])\)\s+(.*)$")  # «а) … б) …»
 TABLE_HEADER_RE = re.compile(r"^\|(.+)\|$")
 TABLE_SEP_RE = re.compile(r"^\|(\s*[-:]+\s*\|)+$")
@@ -727,6 +760,13 @@ def parse_markdown(md: str):
             i += 1
             continue
 
+        m = LIST_HYPHEN_RE.match(stripped)
+        if m:
+            flush_para()
+            blocks.append({"kind": "list_dash", "text": m.group(1)})
+            i += 1
+            continue
+
         m = LIST_LETTER_RE.match(stripped)
         if m:
             flush_para()
@@ -801,11 +841,28 @@ def render(blocks):
 
             text_upper = text.upper()
             if level == 1:
-                # Top-level structural OR chapter OR appendix
-                if text_upper in STRUCTURAL_HEADINGS or CHAPTER_RE.match(text) or APPENDIX_RE.match(text_upper):
+                # Appendix: "ДОДАТОК Х" must sit on the same page as the
+                # appendix title (next H1) per methodics §3.16. Render the
+                # appendix header (with page break), then immediately the
+                # appendix title as a centered subtitle WITHOUT page break,
+                # consuming the next heading block.
+                if APPENDIX_RE.match(text_upper):
                     add_top_level_heading(doc, text)
-                else:
-                    add_top_level_heading(doc, text)
+                    # If the next non-empty block is another H1, treat it
+                    # as the appendix's title — centered, sentence case,
+                    # no page break.
+                    j = i + 1
+                    while j < len(blocks) and blocks[j]["kind"] == "pagebreak":
+                        j += 1
+                    if j < len(blocks) and blocks[j]["kind"] == "heading" and blocks[j]["level"] == 1:
+                        add_appendix_title(doc, blocks[j]["text"])
+                        i = j + 1
+                        continue
+                    i += 1
+                    continue
+
+                # Top-level structural OR chapter heading
+                add_top_level_heading(doc, text)
 
                 # Special handling for ЗМІСТ: emit a TOC field and skip the
                 # static body of section entries until the next H1 / pagebreak.
