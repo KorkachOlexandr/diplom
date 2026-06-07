@@ -1,12 +1,12 @@
 # Титульний аркуш
 
-КИЇВСЬКИЙ НАЦІОНАЛЬНИЙ УНІВЕРСИТЕТ ІМЕНІ ТАРАСА ШЕВЧЕНКА
+**КИЇВСЬКИЙ НАЦІОНАЛЬНИЙ УНІВЕРСИТЕТ ІМЕНІ ТАРАСА ШЕВЧЕНКА**
 
 Факультет комп'ютерних наук та кібернетики
 
 Кафедра теоретичної кібернетики
 
-Кваліфікаційна робота
+**Кваліфікаційна робота**
 
 на здобуття ступеня бакалавра
 
@@ -52,7 +52,7 @@
 
 (підпис)
 
-КИЇВ 2026
+**КИЇВ 2026**
 
 \newpage
 
@@ -813,37 +813,37 @@ $$R = 3.0 \cdot 9 + 5.0 \cdot (0.76 + 0.76 + 0.45) + 3.0 \cdot 0 + 3.0 \cdot 0 =
 
 # ПЕРЕЛІК ДЖЕРЕЛ ПОСИЛАННЯ
 
-1. Про вищу освіту: Закон України від 01.07.2014 № 1556-VII. *Відомості Верховної Ради України*. 2014. № 37–38. Ст. 2004.
+1. Про вищу освіту : Закон України від 01.07.2014 № 1556-VII // Відомості Верховної Ради України. 2014. № 37–38. Ст. 2004.
 
-2. Про освіту: Закон України від 05.09.2017 № 2145-VIII. *Відомості Верховної Ради України*. 2017. № 38–39. Ст. 380.
+2. Про освіту : Закон України від 05.09.2017 № 2145-VIII // Відомості Верховної Ради України. 2017. № 38–39. Ст. 380.
 
-3. ДСТУ 8302:2015. Інформація та документація. Бібліографічне посилання. Загальні положення та правила складання. Київ: ДП «УкрНДНЦ», 2016. 17 с.
+3. Інформація та документація. Бібліографічне посилання. Загальні положення та правила складання : ДСТУ 8302:2015. Київ : ДП «УкрНДНЦ», 2016. 17 с.
 
-4. Карнаух Т. О., Омельчук Л. Л., Ставровський А. Б. Методичні вказівки з підготовки та оформлення кваліфікаційних та курсових робіт для студентів факультету комп'ютерних наук та кібернетики. Київ: Київський національний університет імені Тараса Шевченка, 2025. 58 с.
+4. Карнаух Т. О., Омельчук Л. Л., Ставровський А. Б. Методичні вказівки з підготовки та оформлення кваліфікаційних та курсових робіт для студентів факультету комп'ютерних наук та кібернетики. Київ : Київський національний університет імені Тараса Шевченка, 2025. 58 с.
 
-5. Положення про систему запобігання та виявлення академічного плагіату в роботах здобувачів вищої освіти Київського національного університету імені Тараса Шевченка. Київ: Київський національний університет імені Тараса Шевченка, 2020.
+5. Положення про систему запобігання та виявлення академічного плагіату в роботах здобувачів вищої освіти Київського національного університету імені Тараса Шевченка. Київ : Київський національний університет імені Тараса Шевченка, 2020.
 
-6. Schleimer S., Wilkerson D. S., Aiken A. Winnowing: local algorithms for document fingerprinting. *Proceedings of the 2003 ACM SIGMOD International Conference on Management of Data*. ACM, 2003. P. 76–85.
+6. Schleimer S., Wilkerson D. S., Aiken A. Winnowing: local algorithms for document fingerprinting // Proceedings of the 2003 ACM SIGMOD International Conference on Management of Data. New York : ACM, 2003. P. 76–85.
 
-7. Prechelt L., Malpohl G., Philippsen M. Finding Plagiarisms among a Set of Programs with JPlag. *Journal of Universal Computer Science*. 2002. Vol. 8, № 11. P. 1016–1038.
+7. Prechelt L., Malpohl G., Philippsen M. Finding Plagiarisms among a Set of Programs with JPlag // Journal of Universal Computer Science. 2002. Vol. 8, № 11. P. 1016–1038.
 
-8. Maertens R., Van Petegem C., Strijbol N., Baeyens T., Jacobs A. C., Dawyndt P., Mesuere B. Dolos: Language-agnostic plagiarism detection in source code. *Journal of Computer Assisted Learning*. 2022. Vol. 38, № 4. P. 1046–1061.
+8. Maertens R., Van Petegem C., Strijbol N., Baeyens T., Jacobs A. C., Dawyndt P., Mesuere B. Dolos: Language-agnostic plagiarism detection in source code // Journal of Computer Assisted Learning. 2022. Vol. 38, № 4. P. 1046–1061.
 
-9. Maurer H., Kappe F., Zaka B. Plagiarism — A Survey. *Journal of Universal Computer Science*. 2006. Vol. 12, № 8. P. 1050–1084.
+9. Maurer H., Kappe F., Zaka B. Plagiarism — A Survey // Journal of Universal Computer Science. 2006. Vol. 12, № 8. P. 1050–1084.
 
-10. Hoad T. C., Zobel J. Methods for identifying versioned and plagiarised documents. *Journal of the American Society for Information Science and Technology*. 2003. Vol. 54, № 3. P. 203–215.
+10. Hoad T. C., Zobel J. Methods for identifying versioned and plagiarised documents // Journal of the American Society for Information Science and Technology. 2003. Vol. 54, № 3. P. 203–215.
 
-11. Guo B., Zhang X., Wang Z., Jiang M., Nie J., Ding Y., Yue J., Wu Y. How Close is ChatGPT to Human Experts? Comparison Corpus, Evaluation, and Detection. *arXiv preprint arXiv:2301.07597*. 2023.
+11. Guo B., Zhang X., Wang Z., Jiang M., Nie J., Ding Y., Yue J., Wu Y. How Close is ChatGPT to Human Experts? Comparison Corpus, Evaluation, and Detection. arXiv preprint arXiv:2301.07597. 2023.
 
-12. Wang Y., Mansurov J., Ivanov P., Su J., Shelmanov A., Tsvigun A., Whitehouse C., Afzal O. M., Mahmoud T., Aji A. F., Habash N., Gurevych I., Nakov P. M4: Multi-generator, Multi-domain, and Multi-lingual Black-Box Machine-Generated Text Detection. *Proceedings of EACL 2024*. ACL, 2024. P. 1369–1407.
+12. Wang Y., Mansurov J., Ivanov P., Su J., Shelmanov A., Tsvigun A., Whitehouse C., Afzal O. M., Mahmoud T., Aji A. F., Habash N., Gurevych I., Nakov P. M4: Multi-generator, Multi-domain, and Multi-lingual Black-Box Machine-Generated Text Detection // Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics (EACL 2024). Stroudsburg : ACL, 2024. P. 1369–1407.
 
-13. Sadasivan V. S., Kumar A., Balasubramanian S., Wang W., Feizi S. Can AI-Generated Text be Reliably Detected? *arXiv preprint arXiv:2303.11156*. 2023.
+13. Sadasivan V. S., Kumar A., Balasubramanian S., Wang W., Feizi S. Can AI-Generated Text be Reliably Detected? arXiv preprint arXiv:2303.11156. 2023.
 
-14. Mitchell E., Lee Y., Khazatsky A., Manning C. D., Finn C. DetectGPT: Zero-Shot Machine-Generated Text Detection using Probability Curvature. *Proceedings of ICML 2023*. PMLR, 2023. Vol. 202. P. 24950–24962.
+14. Mitchell E., Lee Y., Khazatsky A., Manning C. D., Finn C. DetectGPT: Zero-Shot Machine-Generated Text Detection using Probability Curvature // Proceedings of the 40th International Conference on Machine Learning (ICML 2023). PMLR, 2023. Vol. 202. P. 24950–24962.
 
-15. Liang W., Yuksekgonul M., Mao Y., Wu E., Zou J. GPT detectors are biased against non-native English writers. *Patterns*. 2023. Vol. 4, № 7. Article 100779.
+15. Liang W., Yuksekgonul M., Mao Y., Wu E., Zou J. GPT detectors are biased against non-native English writers // Patterns. 2023. Vol. 4, № 7. Article 100779.
 
-16. He X., Shen X., Chen Z., Backes M., Zhang Y. MGTBench: Benchmarking Machine-Generated Text Detection. *Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security (CCS '24)*. ACM, 2024.
+16. He X., Shen X., Chen Z., Backes M., Zhang Y. MGTBench: Benchmarking Machine-Generated Text Detection // Proceedings of the 2024 ACM SIGSAC Conference on Computer and Communications Security (CCS '24). New York : ACM, 2024.
 
 17. Google Developers. Classroom API Reference. URL: https://developers.google.com/classroom/reference/rest (дата звернення: 06.06.2026).
 
@@ -851,19 +851,19 @@ $$R = 3.0 \cdot 9 + 5.0 \cdot (0.76 + 0.76 + 0.45) + 3.0 \cdot 0 + 3.0 \cdot 0 =
 
 19. Turnitin LLC. Detecting student collusion in your institution. URL: https://www.turnitin.com/blog/how-to-check-for-student-collusion-in-your-institution (дата звернення: 06.06.2026).
 
-20. Google LLC. Turn on school matches for originality reports in Classroom. URL: https://support.google.com/edu/classroom/answer/10039349 (дата звернення: 06.06.2026).
+20. Google LLC. Turn on school matches for originality reports in Classroom : Classroom Help. URL: https://support.google.com/edu/classroom/answer/10039349 (дата звернення: 06.06.2026).
 
-21. Google LLC. School matches are available in originality reports for Education customers. *Google Workspace Updates Blog*. April 2021. URL: https://workspaceupdates.googleblog.com/2021/04/school-matches-in-originality-reports-for-education-customers.html (дата звернення: 06.06.2026).
+21. Google LLC. School matches are available in originality reports for Education customers // Google Workspace Updates Blog. April 2021. URL: https://workspaceupdates.googleblog.com/2021/04/school-matches-in-originality-reports-for-education-customers.html (дата звернення: 06.06.2026).
 
 22. Copyleaks Ltd. Maintaining Academic Integrity with the Copyleaks API. URL: https://docs.copyleaks.com/concepts/use-cases/academic-integrity/ (дата звернення: 06.06.2026).
 
-23. Turnitin LLC. Turnitin Helps Educators and Publishers Advance Critical Thinking with New AI Paraphrasing Detection Feature. *Press Release*. URL: https://www.turnitin.com/press/turnitin-new-ai-paraphrasing-detection-feature (дата звернення: 06.06.2026).
+23. Turnitin LLC. Turnitin Helps Educators and Publishers Advance Critical Thinking with New AI Paraphrasing Detection Feature : Press Release. URL: https://www.turnitin.com/press/turnitin-new-ai-paraphrasing-detection-feature (дата звернення: 06.06.2026).
 
-24. Turnitin LLC. AI writing detection capabilities — FAQs. URL: https://guides.turnitin.com/hc/en-us/articles/28477544839821 (дата звернення: 06.06.2026).
+24. Turnitin LLC. AI writing detection capabilities : FAQs. URL: https://guides.turnitin.com/hc/en-us/articles/28477544839821 (дата звернення: 06.06.2026).
 
 25. Copyleaks Ltd. How does Copyleaks AI Detection work? URL: https://help.copyleaks.com/hc/en-us/articles/33816916374285 (дата звернення: 06.06.2026).
 
-26. Russell J., Karpinska M., Iyyer M. People who frequently use ChatGPT for writing tasks are accurate and robust detectors of AI-generated text. *arXiv preprint arXiv:2501.15654*. 2025.
+26. Russell J., Karpinska M., Iyyer M. People who frequently use ChatGPT for writing tasks are accurate and robust detectors of AI-generated text. arXiv preprint arXiv:2501.15654. 2025.
 
 \newpage
 
