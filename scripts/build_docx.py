@@ -30,6 +30,7 @@ from docx.shared import Cm, Mm, Pt, Emu
 THESIS_MD = Path(__file__).resolve().parent.parent / "thesis" / "diploma.md"
 THESIS_DOCX = Path(__file__).resolve().parent.parent / "thesis" / "diploma.docx"
 FIGURES_DIR = Path(__file__).resolve().parent.parent / "thesis" / "figures"
+TEMPLATE_DOCX = Path(__file__).resolve().parent / "template_makarenko.docx"
 
 
 # ---------- low-level helpers ----------
@@ -289,11 +290,27 @@ def add_omml_display(paragraph, latex: str):
 
 
 def add_top_level_heading(doc, text: str, *, page_break: bool = True):
-    """Top-level heading — applied via Word's Heading 1 style so the TOC
-    field picks it up. The Heading 1 style is configured in
-    `setup_heading_styles` to match the methodics: bold, UPPERCASE,
-    centered, with `page break before`."""
+    """Top-level heading mirroring the Makarenko template's pattern:
+    Heading 1 style + per-paragraph pageBreakBefore + center align +
+    firstLine 0; run-level TNR override."""
     p = doc.add_paragraph(style=doc.styles["Heading 1"])
+    pPr = p._element.get_or_add_pPr()
+    # pageBreakBefore
+    if page_break and pPr.find(qn("w:pageBreakBefore")) is None:
+        pPr.append(OxmlElement("w:pageBreakBefore"))
+    # firstLine="0"
+    ind = pPr.find(qn("w:ind"))
+    if ind is None:
+        ind = OxmlElement("w:ind")
+        pPr.append(ind)
+    ind.set(qn("w:firstLine"), "0")
+    # centered
+    jc = pPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        pPr.append(jc)
+    jc.set(qn("w:val"), "center")
+
     text = text.strip().rstrip(".").upper()
     run = p.add_run(text)
     set_run_font(run, size_pt=14, bold=True)
@@ -301,8 +318,26 @@ def add_top_level_heading(doc, text: str, *, page_break: bool = True):
 
 
 def add_subsection_heading(doc, text: str):
-    """Subsection heading 'N.M Title' — applied via Word's Heading 2 style."""
+    """Subsection heading — Heading 2 style + paragraph indent + bold + TNR."""
     p = doc.add_paragraph(style=doc.styles["Heading 2"])
+    pPr = p._element.get_or_add_pPr()
+    # ensure no pageBreakBefore inherited from style (if any)
+    pb = pPr.find(qn("w:pageBreakBefore"))
+    if pb is not None:
+        pPr.remove(pb)
+    # paragraph indent
+    ind = pPr.find(qn("w:ind"))
+    if ind is None:
+        ind = OxmlElement("w:ind")
+        pPr.append(ind)
+    ind.set(qn("w:firstLine"), "720")  # 1.27 cm in twentieths of a point
+    # left-aligned
+    jc = pPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        pPr.append(jc)
+    jc.set(qn("w:val"), "left")
+
     run = p.add_run(text.strip())
     set_run_font(run, size_pt=14, bold=True)
     return p
@@ -720,15 +755,25 @@ CHAPTER_RE = re.compile(r"^\d+\s+[А-ЯЇІЄҐ\s']+$")
 APPENDIX_RE = re.compile(r"^ДОДАТОК [А-ЯҐЇЄ]$")
 
 
-def render(blocks):
-    doc = Document()
-    setup_section(doc.sections[0], first_page=True)
-    setup_headers(doc.sections[0])
+def clear_body(doc):
+    """Remove every paragraph and table from the template's body so the
+    resulting document inherits ONLY styles, section properties, headers
+    and footers — but starts with an empty content area."""
+    body = doc.element.body
+    sectPr = body.find(qn("w:sectPr"))
+    # Remove every child of body except the final sectPr (which holds
+    # margins / page size / header references).
+    for child in list(body):
+        if child is sectPr:
+            continue
+        body.remove(child)
 
-    # default style
-    style = doc.styles["Normal"]
-    set_run_font_style(style)
-    setup_heading_styles(doc)
+
+def render(blocks):
+    # Open the Makarenko template — inherit all styles, margins, headers,
+    # footers, theme. We only clear the body content.
+    doc = Document(str(TEMPLATE_DOCX))
+    clear_body(doc)
     enable_field_update_on_open(doc)
 
     # state: title-page rendering flag
