@@ -15,15 +15,19 @@ class LeakageHit(BaseModel):
     evidence: str
 
 
+class CohortSpan(BaseModel):
+    this_span: tuple[int, int]
+    other_span: tuple[int, int]
+    this_excerpt: str
+    other_excerpt: str
+
+
 class CohortMatch(BaseModel):
     other_submission_id: str
     other_student_name: str
     channel: Literal["winnowing", "ast"]
     score: float
-    this_span: tuple[int, int]
-    other_span: tuple[int, int]
-    this_excerpt: str
-    other_excerpt: str
+    spans: list[CohortSpan] = Field(default_factory=list)
 
 
 class WebHit(BaseModel):

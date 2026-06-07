@@ -112,37 +112,50 @@ def compare_subtrees(
     submissions: list[tuple[str, list[SubtreeHash]]],
     min_score: float = 0.15,
 ) -> list[tuple[str, str, AstMatch]]:
-    by_hash: dict[str, list[tuple[str, SubtreeHash]]] = defaultdict(list)
-    counts: dict[str, int] = {}
+    # Per-submission multiset of subtree hashes — count, not list, so a
+    # repeated structural pattern (e.g. two calls of `fib(n - NUM)` after
+    # normalization) doesn't get squared into the shared count via Cartesian
+    # product across owners. The shared count is multiset intersection.
+    counts: dict[str, int] = {sid: len(hs) for sid, hs in submissions}
+    hash_multiset: dict[str, dict[str, int]] = {sid: {} for sid, _ in submissions}
+    largest_seen: dict[str, dict[str, int]] = {sid: {} for sid, _ in submissions}
     for sid, hashes in submissions:
-        counts[sid] = len(hashes)
         for h in hashes:
-            by_hash[h.hash_value].append((sid, h))
+            hash_multiset[sid][h.hash_value] = hash_multiset[sid].get(h.hash_value, 0) + 1
+            prev = largest_seen[sid].get(h.hash_value, 0)
+            if h.size > prev:
+                largest_seen[sid][h.hash_value] = h.size
 
-    shared: dict[tuple[str, str], list[SubtreeHash]] = defaultdict(list)
-    for owners in by_hash.values():
+    # All hashes that appear in at least two submissions.
+    all_hashes: set[str] = set()
+    for ms in hash_multiset.values():
+        all_hashes.update(ms.keys())
+
+    sub_ids = [sid for sid, _ in submissions]
+    shared_count: dict[tuple[str, str], int] = {}
+    largest_subtree: dict[tuple[str, str], int] = {}
+    for h in all_hashes:
+        owners = [sid for sid in sub_ids if h in hash_multiset[sid]]
         if len(owners) < 2:
             continue
         for i in range(len(owners)):
             for j in range(i + 1, len(owners)):
-                if owners[i][0] == owners[j][0]:
-                    continue
-                key = tuple(sorted((owners[i][0], owners[j][0])))
-                # We keep the bigger of the two as the evidence size — both
-                # are equal in structural terms (same hash) so this is just
-                # for display purposes.
-                shared[key].append(owners[i][1] if owners[i][1].size >= owners[j][1].size else owners[j][1])
+                a, b = owners[i], owners[j]
+                key = tuple(sorted((a, b)))
+                contribution = min(hash_multiset[a][h], hash_multiset[b][h])
+                shared_count[key] = shared_count.get(key, 0) + contribution
+                size = max(largest_seen[a][h], largest_seen[b][h])
+                if size > largest_subtree.get(key, 0):
+                    largest_subtree[key] = size
 
     out: list[tuple[str, str, AstMatch]] = []
-    for (id_a, id_b), subtrees in shared.items():
+    for (id_a, id_b), n_shared in shared_count.items():
         # Jaccard for the same reason as the winnowing channel: stable
         # against very different submission lengths.
-        n_shared = len(subtrees)
         union = counts[id_a] + counts[id_b] - n_shared
         score = n_shared / union if union else 0.0
         if score < min_score:
             continue
-        largest = max(s.size for s in subtrees)
         out.append(
             (
                 id_a,
@@ -150,8 +163,8 @@ def compare_subtrees(
                 AstMatch(
                     other_id=id_b,
                     score=score,
-                    shared_subtrees=len(subtrees),
-                    largest_subtree=largest,
+                    shared_subtrees=n_shared,
+                    largest_subtree=largest_subtree[(id_a, id_b)],
                 ),
             )
         )

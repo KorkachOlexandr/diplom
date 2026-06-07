@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.pipeline import store
-from app.report.model import LeakageHit, ScanReport, SubmissionReport
+from app.report.model import LeakageHit, ScanReport, SubmissionReport  # noqa: F401
 
 
 def _make_report(scan_id: str = "scan-1") -> ScanReport:

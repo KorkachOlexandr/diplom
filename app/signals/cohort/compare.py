@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from app.report.model import CohortMatch, SubmissionReport
+from app.report.model import CohortMatch, CohortSpan, SubmissionReport
 from app.signals.cohort.ast_hash import compare_subtrees, subtree_hashes
 from app.signals.cohort.tokenize_code import detect_language, tokenize_source
 from app.signals.cohort.winnowing import compare_submissions, fingerprints
@@ -32,7 +32,11 @@ log = logging.getLogger(__name__)
 WINNOW_K = 5
 WINNOW_W = 4
 WINNOW_MIN_SCORE = 0.40
-AST_MIN_SCORE = 0.30
+# AST_MIN_SCORE is set above the empirical noise floor for small functions.
+# Below ~0.45, two unrelated recursive functions can collide on shared
+# patterns like `f(n - NUM) + f(n - NUM)` after identifier normalization
+# (recursive vs memoized fib hit ~0.30 on default settings).
+AST_MIN_SCORE = 0.45
 MAX_SPANS_PER_MATCH = 4
 
 
@@ -75,33 +79,43 @@ def _run_winnowing_channel(
     for id_a, id_b, m in pairs:
         text_a = sub_by_id[id_a].text
         text_b = sub_by_id[id_b].text
-        # surface up to N spans; UI shows them one row each
-        spans = m.spans[:MAX_SPANS_PER_MATCH]
-        for (a_start, a_end), (b_start, b_end) in spans:
-            matches[id_a].append(
-                CohortMatch(
-                    other_submission_id=id_b,
-                    other_student_name=name_by_id[id_b],
-                    channel="winnowing",
-                    score=float(m.score),
+        spans_a_to_b: list[CohortSpan] = []
+        spans_b_to_a: list[CohortSpan] = []
+        for (a_start, a_end), (b_start, b_end) in m.spans[:MAX_SPANS_PER_MATCH]:
+            spans_a_to_b.append(
+                CohortSpan(
                     this_span=(a_start, a_end),
                     other_span=(b_start, b_end),
                     this_excerpt=_truncate(text_a[a_start:a_end]),
                     other_excerpt=_truncate(text_b[b_start:b_end]),
                 )
             )
-            matches[id_b].append(
-                CohortMatch(
-                    other_submission_id=id_a,
-                    other_student_name=name_by_id[id_a],
-                    channel="winnowing",
-                    score=float(m.score),
+            spans_b_to_a.append(
+                CohortSpan(
                     this_span=(b_start, b_end),
                     other_span=(a_start, a_end),
                     this_excerpt=_truncate(text_b[b_start:b_end]),
                     other_excerpt=_truncate(text_a[a_start:a_end]),
                 )
             )
+        matches[id_a].append(
+            CohortMatch(
+                other_submission_id=id_b,
+                other_student_name=name_by_id[id_b],
+                channel="winnowing",
+                score=float(m.score),
+                spans=spans_a_to_b,
+            )
+        )
+        matches[id_b].append(
+            CohortMatch(
+                other_submission_id=id_a,
+                other_student_name=name_by_id[id_a],
+                channel="winnowing",
+                score=float(m.score),
+                spans=spans_b_to_a,
+            )
+        )
 
 
 def _run_ast_channel(
@@ -119,13 +133,15 @@ def _run_ast_channel(
     pairs = compare_subtrees(hashes_by_sub, min_score=AST_MIN_SCORE)
 
     for id_a, id_b, m in pairs:
-        # AST channel reports a global structural-overlap score; we don't
-        # have per-span char offsets for the matched subtrees as easily as
-        # winnowing does, so we surface one summary row per pair with the
-        # largest shared subtree size in the excerpt.
         excerpt = (
             f"{m.shared_subtrees} shared AST subtrees "
             f"(largest = {m.largest_subtree} nodes)"
+        )
+        summary_span = CohortSpan(
+            this_span=(0, 0),
+            other_span=(0, 0),
+            this_excerpt=excerpt,
+            other_excerpt=excerpt,
         )
         matches[id_a].append(
             CohortMatch(
@@ -133,10 +149,7 @@ def _run_ast_channel(
                 other_student_name=name_by_id[id_b],
                 channel="ast",
                 score=float(m.score),
-                this_span=(0, 0),
-                other_span=(0, 0),
-                this_excerpt=excerpt,
-                other_excerpt=excerpt,
+                spans=[summary_span],
             )
         )
         matches[id_b].append(
@@ -145,10 +158,7 @@ def _run_ast_channel(
                 other_student_name=name_by_id[id_a],
                 channel="ast",
                 score=float(m.score),
-                this_span=(0, 0),
-                other_span=(0, 0),
-                this_excerpt=excerpt,
-                other_excerpt=excerpt,
+                spans=[summary_span],
             )
         )
 

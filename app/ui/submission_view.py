@@ -72,13 +72,16 @@ def _render_cohort(sub: SubmissionReport) -> None:
         with st.container(border=True):
             st.markdown(
                 f"**Match with {m.other_student_name}** · channel: `{m.channel}` · "
-                f"score: {m.score:.2f}"
+                f"Jaccard score: {m.score:.2f} · {len(m.spans)} span(s)"
             )
-            col_a, col_b = st.columns(2)
-            col_a.caption("This submission")
-            col_a.markdown(f"> {html.escape(m.this_excerpt)}")
-            col_b.caption("Other submission")
-            col_b.markdown(f"> {html.escape(m.other_excerpt)}")
+            for i, span in enumerate(m.spans, 1):
+                if len(m.spans) > 1:
+                    st.caption(f"Span {i}")
+                col_a, col_b = st.columns(2)
+                col_a.caption("This submission")
+                col_a.markdown(f"```\n{span.this_excerpt}\n```")
+                col_b.caption("Other submission")
+                col_b.markdown(f"```\n{span.other_excerpt}\n```")
 
 
 def _render_web(sub: SubmissionReport) -> None:
