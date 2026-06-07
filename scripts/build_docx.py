@@ -157,17 +157,11 @@ def _split_inline(text: str):
 
 
 def add_top_level_heading(doc, text: str, *, page_break: bool = True):
-    """Top-level heading: bold UPPERCASE centered, no period."""
-    if page_break:
-        # Insert an explicit page break paragraph
-        para = doc.add_paragraph()
-        r = para.add_run()
-        br = OxmlElement("w:br")
-        br.set(qn("w:type"), "page")
-        r._element.append(br)
-    p = doc.add_paragraph()
-    paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.CENTER,
-                    space_after=24)
+    """Top-level heading — applied via Word's Heading 1 style so the TOC
+    field picks it up. The Heading 1 style is configured in
+    `setup_heading_styles` to match the methodics: bold, UPPERCASE,
+    centered, with `page break before`."""
+    p = doc.add_paragraph(style=doc.styles["Heading 1"])
     text = text.strip().rstrip(".").upper()
     run = p.add_run(text)
     set_run_font(run, size_pt=14, bold=True)
@@ -175,12 +169,169 @@ def add_top_level_heading(doc, text: str, *, page_break: bool = True):
 
 
 def add_subsection_heading(doc, text: str):
-    """Subsection heading 'N.M Title': paragraph indent, bold, sentence case."""
-    p = doc.add_paragraph()
-    paragraph_setup(p, indent_first=True, alignment=WD_ALIGN_PARAGRAPH.LEFT,
-                    space_before=18, space_after=18)
+    """Subsection heading 'N.M Title' — applied via Word's Heading 2 style."""
+    p = doc.add_paragraph(style=doc.styles["Heading 2"])
     run = p.add_run(text.strip())
     set_run_font(run, size_pt=14, bold=True)
+    return p
+
+
+def setup_heading_styles(doc):
+    """Configure Heading 1/2 to match the methodics, so Word's TOC field
+    can pick them up. Keeping the standard style names is what makes
+    `TOC \\o "1-2"` populate automatically."""
+
+    def force_tnr_font(style):
+        rPr = style.element.get_or_add_rPr()
+        rFonts = rPr.find(qn("w:rFonts"))
+        if rFonts is None:
+            rFonts = OxmlElement("w:rFonts")
+            rPr.append(rFonts)
+        for attr in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+            rFonts.set(qn(attr), "Times New Roman")
+        # explicit black color, override of "auto" theme colors
+        color = rPr.find(qn("w:color"))
+        if color is None:
+            color = OxmlElement("w:color")
+            rPr.append(color)
+        color.set(qn("w:val"), "000000")
+
+    def set_page_break_before(pf_element, enable: bool):
+        # WD page_break_before via OXML to ensure persistence on style.
+        pPr = pf_element
+        existing = pPr.find(qn("w:pageBreakBefore"))
+        if enable:
+            if existing is None:
+                existing = OxmlElement("w:pageBreakBefore")
+                pPr.append(existing)
+        else:
+            if existing is not None:
+                pPr.remove(existing)
+
+    h1 = doc.styles["Heading 1"]
+    h1.font.name = "Times New Roman"
+    h1.font.size = Pt(14)
+    h1.font.bold = True
+    h1.font.italic = False
+    pf1 = h1.paragraph_format
+    pf1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    pf1.first_line_indent = Cm(0)
+    pf1.left_indent = Cm(0)
+    pf1.right_indent = Cm(0)
+    pf1.line_spacing = 1.5
+    pf1.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    pf1.space_before = Pt(0)
+    pf1.space_after = Pt(24)
+    pf1.keep_with_next = True
+    # page break before via OXML
+    pPr1 = h1.element.find(qn("w:pPr"))
+    if pPr1 is None:
+        pPr1 = OxmlElement("w:pPr")
+        h1.element.insert(0, pPr1)
+    set_page_break_before(pPr1, True)
+    force_tnr_font(h1)
+
+    h2 = doc.styles["Heading 2"]
+    h2.font.name = "Times New Roman"
+    h2.font.size = Pt(14)
+    h2.font.bold = True
+    h2.font.italic = False
+    pf2 = h2.paragraph_format
+    pf2.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    pf2.first_line_indent = Cm(1.27)
+    pf2.left_indent = Cm(0)
+    pf2.line_spacing = 1.5
+    pf2.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
+    pf2.space_before = Pt(18)
+    pf2.space_after = Pt(18)
+    pf2.keep_with_next = True
+    pPr2 = h2.element.find(qn("w:pPr"))
+    if pPr2 is None:
+        pPr2 = OxmlElement("w:pPr")
+        h2.element.insert(0, pPr2)
+    set_page_break_before(pPr2, False)
+    force_tnr_font(h2)
+
+
+def add_field(paragraph, instruction: str, placeholder_text: str = ""):
+    """Insert a Word field into the given paragraph.
+
+    instruction is the field code (e.g. 'TOC \\o "1-2" \\h \\z \\u'
+    or 'NUMPAGES \\* MERGEFORMAT'). Returns the run that contains the
+    placeholder, so the caller can apply formatting to it."""
+    run = paragraph.add_run()
+    set_run_font(run, size_pt=14)
+
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    # Force Word to refresh the field on open by setting dirty
+    fld_begin.set(qn("w:dirty"), "true")
+
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = " " + instruction + " "
+
+    fld_sep = OxmlElement("w:fldChar")
+    fld_sep.set(qn("w:fldCharType"), "separate")
+
+    t = OxmlElement("w:t")
+    t.set(qn("xml:space"), "preserve")
+    t.text = placeholder_text
+
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+
+    r = run._element
+    r.append(fld_begin)
+    r.append(instr)
+    r.append(fld_sep)
+    r.append(t)
+    r.append(fld_end)
+    return run
+
+
+def insert_toc_field(doc):
+    """Insert a TOC field that will populate when Word opens the doc
+    (the document's updateFields setting is true, see enable_field_update)."""
+    p = doc.add_paragraph()
+    paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.LEFT,
+                    space_before=0, space_after=0, line_spacing=1.5)
+    add_field(
+        p,
+        # \o "1-2"  — include heading levels 1..2
+        # \h         — make entries into hyperlinks
+        # \z         — hide tab-leader/page numbers in web layout (ignored in print)
+        # \u         — use applied outline level
+        r'TOC \o "1-2" \h \z \u',
+        placeholder_text="Зміст буде створено автоматично при відкритті документа в Microsoft Word "
+                         "(натисніть F9 або «Оновити поле» якщо не оновився).",
+    )
+
+
+def enable_field_update_on_open(doc):
+    """Set <w:updateFields w:val="true"/> in settings so Word refreshes
+    all fields (TOC, NUMPAGES) when the document is opened."""
+    settings = doc.settings.element
+    existing = settings.find(qn("w:updateFields"))
+    if existing is None:
+        existing = OxmlElement("w:updateFields")
+        settings.append(existing)
+    existing.set(qn("w:val"), "true")
+
+
+def add_referat_volume_paragraph(doc, prefix: str, suffix: str):
+    """Render the «Обсяг роботи — N сторінок ... » paragraph with N as a
+    NUMPAGES field, so the page count is always live."""
+    p = doc.add_paragraph()
+    paragraph_setup(p, indent_first=True, alignment=WD_ALIGN_PARAGRAPH.JUSTIFY)
+
+    r1 = p.add_run(prefix)
+    set_run_font(r1, size_pt=14)
+
+    add_field(p, "NUMPAGES \\* MERGEFORMAT", placeholder_text="56")
+
+    r2 = p.add_run(suffix)
+    set_run_font(r2, size_pt=14)
     return p
 
 
@@ -437,6 +588,8 @@ def render(blocks):
     # default style
     style = doc.styles["Normal"]
     set_run_font_style(style)
+    setup_heading_styles(doc)
+    enable_field_update_on_open(doc)
 
     # state: title-page rendering flag
     in_title_page = True
@@ -468,6 +621,22 @@ def render(blocks):
                     add_top_level_heading(doc, text)
                 else:
                     add_top_level_heading(doc, text)
+
+                # Special handling for ЗМІСТ: emit a TOC field and skip the
+                # static body of section entries until the next H1 / pagebreak.
+                if text_upper == "ЗМІСТ":
+                    insert_toc_field(doc)
+                    i += 1
+                    while i < len(blocks):
+                        nb = blocks[i]
+                        if nb["kind"] == "heading" and nb["level"] == 1:
+                            break
+                        if nb["kind"] == "pagebreak":
+                            # consume the page break that terminates the static TOC
+                            i += 1
+                            break
+                        i += 1
+                    continue
             else:
                 add_subsection_heading(doc, text)
             i += 1
@@ -483,6 +652,13 @@ def render(blocks):
             # Detect "Таблиця N — caption" preceding a table: attach as caption
             if text.startswith("Таблиця "):
                 pending_table_caption = text
+                i += 1
+                continue
+            # Intercept the referat volume sentence and substitute a live
+            # NUMPAGES field for the hardcoded page count.
+            m = re.match(r"^(Обсяг роботи\s+—\s+)(\d+)(\s+сторінок.*)$", text)
+            if m:
+                add_referat_volume_paragraph(doc, m.group(1), m.group(3))
                 i += 1
                 continue
             add_body_paragraph(doc, text)
