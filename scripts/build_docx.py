@@ -279,13 +279,14 @@ def add_omml_display(paragraph, latex: str):
     paragraph._element.append(parsed)
 
 
-# Per methodics §3.2 the gap between a heading and adjacent body text must
-# be at least two line intervals. With TNR 14pt and 1.5 line spacing one
-# interval is 14 × 1.5 = 21 pt, so two intervals = 42 pt = 840 twentieths.
-HEADING_GAP_TWIPS = "840"
-# Body-paragraph line spacing — used for «two consecutive headings» gap
-# which the methodics requires to equal the body line spacing.
-BODY_LINE_GAP_TWIPS = "0"
+# Methodics §3.2 + §5 (page 37):
+# «За міжрядкового інтервалу 1,5, щоб отримати вертикальний відступ не
+#  менш ніж два інтервали, треба додати додатковий вертикальний проміжок
+#  приблизно 8 пунктів.»
+# A single "інтервал" is a fixed unit ~5 mm (defined on page 36); two of
+# them = ~10 mm ≈ 28 pt total. The 1.5 baseline-to-baseline already
+# contributes ~7.5 mm, so the extra space_after only needs to be ~8 pt.
+HEADING_GAP_TWIPS = "160"  # 8 pt in twentieths
 
 
 def _set_spacing(pPr, *, before: str | None = None, after: str | None = None,
