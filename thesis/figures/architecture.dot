@@ -1,0 +1,114 @@
+digraph architecture {
+  rankdir=TB;
+  bgcolor="white";
+  pad=0.4;
+  nodesep=0.45;
+  ranksep=0.55;
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Helvetica",
+    fontsize=11,
+    color="#333333",
+    fillcolor="#f5f5f5",
+    margin=0.15
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    color="#555555"
+  ];
+
+  // UI layer
+  subgraph cluster_ui {
+    label="Інтерфейс викладача  (app/ui, Streamlit)";
+    fontname="Helvetica";
+    fontsize=11;
+    style="rounded,filled";
+    fillcolor="#e7f1ff";
+    color="#6699cc";
+    ui_home    [label="home.py\n(перелік курсів,\nостанні скани)"];
+    ui_assign  [label="assignment_view.py\n(ранжована таблиця\nсабмішнів)"];
+    ui_sub     [label="submission_view.py\n(текст із підсвіченими\nспанами + докази)"];
+  }
+
+  // Orchestration
+  subgraph cluster_pipeline {
+    label="Оркестрація  (app/pipeline)";
+    fontname="Helvetica";
+    fontsize=11;
+    style="rounded,filled";
+    fillcolor="#fff5e6";
+    color="#cc9966";
+    pipe_runner [label="runner.scan_assignment()"];
+    pipe_store  [label="store\n(SQLite)"];
+  }
+
+  // Classroom integration
+  subgraph cluster_classroom {
+    label="Інтеграція  (app/classroom)";
+    fontname="Helvetica";
+    fontsize=11;
+    style="rounded,filled";
+    fillcolor="#e8f5e9";
+    color="#66a366";
+    cls_oauth   [label="oauth.py"];
+    cls_client  [label="client.py\n(courses / coursework /\nsubmissions)"];
+    cls_extr    [label="extractors.py\n(Docs / PDF / DOCX /\n.py текст)"];
+  }
+
+  // Signals
+  subgraph cluster_signals {
+    label="Сигнали  (app/signals)";
+    fontname="Helvetica";
+    fontsize=11;
+    style="rounded,filled";
+    fillcolor="#fde7e7";
+    color="#cc6666";
+    sig_cohort   [label="cohort\nWinnowing  +  AST-хеші\n(розділ 3)"];
+    sig_leak     [label="ai_leakage\n19 правил у 4 сім'ях\n(розділ 4)"];
+    sig_web      [label="webcheck\nстуб-інтерфейс\n(підрозділ 5.1)"];
+  }
+
+  // Report
+  subgraph cluster_report {
+    label="Звіт  (app/report)";
+    fontname="Helvetica";
+    fontsize=11;
+    style="rounded,filled";
+    fillcolor="#f0e6ff";
+    color="#9966cc";
+    rep_model   [label="model.py\nSubmissionReport,\nLeakageHit, CohortMatch"];
+    rep_ranker  [label="ranker.py\nR(s) = wL|L| + ww·Σ winnow\n+ wa·Σ ast + wW·Σ web"];
+  }
+
+  // External
+  gclass [label="Google Classroom\n+ Google Drive", shape=cylinder, fillcolor="#ffffff", style="filled,dashed"];
+  sqlite [label="local SQLite", shape=cylinder, fillcolor="#ffffff", style="filled,dashed"];
+
+  // edges — top-down data flow
+  ui_home -> pipe_runner [label="start scan"];
+  pipe_runner -> cls_oauth [style=dashed, label="auth"];
+  pipe_runner -> cls_client;
+  cls_client -> gclass [dir=both];
+  cls_client -> cls_extr [label="raw files"];
+  cls_extr -> pipe_runner [label="submission texts"];
+
+  pipe_runner -> sig_cohort [label="all submissions"];
+  pipe_runner -> sig_leak [label="per submission"];
+  pipe_runner -> sig_web [label="per submission"];
+
+  sig_cohort -> rep_model;
+  sig_leak   -> rep_model;
+  sig_web    -> rep_model;
+
+  rep_model -> rep_ranker;
+  rep_ranker -> ui_assign [label="ranked list"];
+  ui_assign -> ui_sub [label="open"];
+  rep_model -> ui_sub [label="evidence"];
+
+  pipe_runner -> pipe_store;
+  pipe_store -> sqlite [dir=both];
+}
