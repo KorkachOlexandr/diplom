@@ -279,27 +279,52 @@ def add_omml_display(paragraph, latex: str):
     paragraph._element.append(parsed)
 
 
-def add_top_level_heading(doc, text: str, *, page_break: bool = True):
+# Per methodics §3.2 the gap between a heading and adjacent body text must
+# be at least two line intervals. With TNR 14pt and 1.5 line spacing one
+# interval is 14 × 1.5 = 21 pt, so two intervals = 42 pt = 840 twentieths.
+HEADING_GAP_TWIPS = "840"
+# Body-paragraph line spacing — used for «two consecutive headings» gap
+# which the methodics requires to equal the body line spacing.
+BODY_LINE_GAP_TWIPS = "0"
+
+
+def _set_spacing(pPr, *, before: str | None = None, after: str | None = None,
+                 line: str = "360", line_rule: str = "auto"):
+    spacing = pPr.find(qn("w:spacing"))
+    if spacing is None:
+        spacing = OxmlElement("w:spacing")
+        pPr.append(spacing)
+    if before is not None:
+        spacing.set(qn("w:before"), before)
+    if after is not None:
+        spacing.set(qn("w:after"), after)
+    spacing.set(qn("w:line"), line)
+    spacing.set(qn("w:lineRule"), line_rule)
+
+
+def add_top_level_heading(doc, text: str, *, page_break: bool = True,
+                          space_after_twips: str = HEADING_GAP_TWIPS):
     """Top-level heading mirroring the Makarenko template's pattern:
     Heading 1 style + per-paragraph pageBreakBefore + center align +
-    firstLine 0; run-level TNR override."""
+    firstLine 0; run-level TNR override. The default space_after of
+    42 pt satisfies §3.2 «не менше двох міжрядкових інтервалів».
+    Caller can override the gap (e.g. appendices use the body gap
+    so «ДОДАТОК Х» sits one line above the appendix title)."""
     p = doc.add_paragraph(style=doc.styles["Heading 1"])
     pPr = p._element.get_or_add_pPr()
-    # pageBreakBefore
     if page_break and pPr.find(qn("w:pageBreakBefore")) is None:
         pPr.append(OxmlElement("w:pageBreakBefore"))
-    # firstLine="0"
     ind = pPr.find(qn("w:ind"))
     if ind is None:
         ind = OxmlElement("w:ind")
         pPr.append(ind)
     ind.set(qn("w:firstLine"), "0")
-    # centered
     jc = pPr.find(qn("w:jc"))
     if jc is None:
         jc = OxmlElement("w:jc")
         pPr.append(jc)
     jc.set(qn("w:val"), "center")
+    _set_spacing(pPr, before="0", after=space_after_twips)
 
     text = text.strip().rstrip(".").upper()
     run = p.add_run(text)
@@ -308,57 +333,47 @@ def add_top_level_heading(doc, text: str, *, page_break: bool = True):
 
 
 def add_appendix_title(doc, text: str):
-    """Appendix title — centered, sentence case (no uppercasing), bold,
-    no page break, sits directly under «ДОДАТОК Х»."""
-    # Normalize: drop a leading 'Назва...' style if it's accidentally uppercase
+    """Appendix title — centered, sentence case, bold, sits one body
+    line below «ДОДАТОК Х». §3.2: gap between two consecutive headings
+    equals body line spacing; gap between heading and body ≥ 2 intervals."""
     raw = text.strip().rstrip(".")
     p = doc.add_paragraph()
     pPr = p._element.get_or_add_pPr()
-    # remove any inherited firstLine indent
     ind = pPr.find(qn("w:ind"))
     if ind is None:
         ind = OxmlElement("w:ind")
         pPr.append(ind)
     ind.set(qn("w:firstLine"), "0")
-    # center
     jc = pPr.find(qn("w:jc"))
     if jc is None:
         jc = OxmlElement("w:jc")
         pPr.append(jc)
     jc.set(qn("w:val"), "center")
-    # spacing
-    spacing = pPr.find(qn("w:spacing"))
-    if spacing is None:
-        spacing = OxmlElement("w:spacing")
-        pPr.append(spacing)
-    spacing.set(qn("w:after"), "360")  # ~18pt after
-    spacing.set(qn("w:line"), "360")   # 1.5 line spacing
-    spacing.set(qn("w:lineRule"), "auto")
+    _set_spacing(pPr, before="0", after=HEADING_GAP_TWIPS)
     run = p.add_run(raw)
     set_run_font(run, size_pt=14, bold=True)
     return p
 
 
 def add_subsection_heading(doc, text: str):
-    """Subsection heading — Heading 2 style + paragraph indent + bold + TNR."""
+    """Subsection heading — Heading 2 style + paragraph indent + bold + TNR.
+    Per §3.2 both leading and trailing gaps must be ≥ 2 intervals."""
     p = doc.add_paragraph(style=doc.styles["Heading 2"])
     pPr = p._element.get_or_add_pPr()
-    # ensure no pageBreakBefore inherited from style (if any)
     pb = pPr.find(qn("w:pageBreakBefore"))
     if pb is not None:
         pPr.remove(pb)
-    # paragraph indent
     ind = pPr.find(qn("w:ind"))
     if ind is None:
         ind = OxmlElement("w:ind")
         pPr.append(ind)
-    ind.set(qn("w:firstLine"), "720")  # 1.27 cm in twentieths of a point
-    # left-aligned
+    ind.set(qn("w:firstLine"), "720")
     jc = pPr.find(qn("w:jc"))
     if jc is None:
         jc = OxmlElement("w:jc")
         pPr.append(jc)
     jc.set(qn("w:val"), "left")
+    _set_spacing(pPr, before=HEADING_GAP_TWIPS, after=HEADING_GAP_TWIPS)
 
     run = p.add_run(text.strip())
     set_run_font(run, size_pt=14, bold=True)
@@ -831,14 +846,18 @@ def render(blocks):
                 # appendix title as a centered subtitle WITHOUT page break,
                 # consuming the next heading block.
                 if APPENDIX_RE.match(text_upper):
-                    add_top_level_heading(doc, text)
-                    # If the next non-empty block is another H1, treat it
-                    # as the appendix's title — centered, sentence case,
-                    # no page break.
+                    # «ДОДАТОК Х» followed by the appendix title — two
+                    # consecutive headings, gap = body line spacing (§3.2).
                     j = i + 1
                     while j < len(blocks) and blocks[j]["kind"] == "pagebreak":
                         j += 1
-                    if j < len(blocks) and blocks[j]["kind"] == "heading" and blocks[j]["level"] == 1:
+                    has_title = (j < len(blocks) and blocks[j]["kind"] == "heading"
+                                 and blocks[j]["level"] == 1)
+                    add_top_level_heading(
+                        doc, text,
+                        space_after_twips="0" if has_title else HEADING_GAP_TWIPS,
+                    )
+                    if has_title:
                         add_appendix_title(doc, blocks[j]["text"])
                         i = j + 1
                         continue
