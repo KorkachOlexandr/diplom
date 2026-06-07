@@ -134,22 +134,12 @@ def _add_chunk_to_paragraph(p, kind, payload, *, bold: bool = False, italic: boo
         return
 
     if kind == "mono":
+        # Methodics §3.1: TNR 14pt throughout. No mono fonts permitted.
+        # Inline `code` markers render as normal TNR — only their lexical
+        # form (the surrounding backticks were stripped by the parser)
+        # distinguishes them from prose.
         run = p.add_run(payload)
-        run.font.name = "Courier New"
-        rPr = run._element.get_or_add_rPr()
-        rFonts = rPr.find(qn("w:rFonts"))
-        if rFonts is None:
-            rFonts = OxmlElement("w:rFonts")
-            rPr.append(rFonts)
-        for attr in ("w:ascii", "w:hAnsi", "w:cs"):
-            rFonts.set(qn(attr), "Courier New")
-        run.font.size = Pt(12)
-        # explicit black color
-        color = rPr.find(qn("w:color"))
-        if color is None:
-            color = OxmlElement("w:color")
-            rPr.append(color)
-        color.set(qn("w:val"), "000000")
+        set_run_font(run, size_pt=14)
         return
 
     is_bold = bold or kind == "bold"
@@ -585,7 +575,7 @@ def add_table(doc, header: list[str], rows: list[list[str]], *, caption: str | N
         paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.CENTER,
                         space_before=0, space_after=0, line_spacing=1.0)
         run = p.add_run(h)
-        set_run_font(run, size_pt=12, bold=True)
+        set_run_font(run, size_pt=14, bold=True)
     # data rows
     for ri, row in enumerate(rows, start=1):
         for ci, cell_text in enumerate(row):
@@ -597,17 +587,11 @@ def add_table(doc, header: list[str], rows: list[list[str]], *, caption: str | N
             for kind, payload in _split_inline(cell_text):
                 if kind == "math":
                     anchor = p.add_run()
-                    set_run_font(anchor, size_pt=12)
+                    set_run_font(anchor, size_pt=14)
                     add_omml_inline(anchor, payload)
-                elif kind == "mono":
-                    run = p.add_run(payload)
-                    run.font.name = "Courier New"
-                    run.font.size = Pt(11)
-                    set_run_font(run, size_pt=11)
-                    run.font.name = "Courier New"
                 else:
                     run = p.add_run(payload)
-                    set_run_font(run, size_pt=12,
+                    set_run_font(run, size_pt=14,
                                  bold=(kind == "bold"),
                                  italic=(kind == "italic"))
 
@@ -935,13 +919,15 @@ def render(blocks):
             continue
 
         if b["kind"] == "code":
+            # Methodics §3.1: TNR 14pt, line spacing 1.5 throughout.
+            # Code blocks render in the same font as body text. Visual
+            # distinction is achieved through layout (no first-line indent,
+            # left alignment, preserved line breaks), not font family.
             for code_line in b["lines"]:
                 p = doc.add_paragraph()
-                paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.LEFT,
-                                line_spacing=1.0)
+                paragraph_setup(p, indent_first=False, alignment=WD_ALIGN_PARAGRAPH.LEFT)
                 run = p.add_run(code_line if code_line else " ")
-                run.font.name = "Courier New"
-                run.font.size = Pt(11)
+                set_run_font(run, size_pt=14)
             i += 1
             continue
 
